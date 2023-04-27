@@ -266,14 +266,82 @@ function run_sim(sim, n_steps, verbose = false)
     n_depressed./n, n_healthy./n
 end
 
+function run_sim_lowses(sim, n_steps, verbose = false)
+    # we keep track of the numbers
+    n_depressed = Int[]
+    n_healthy = Int[]
+
+    # simulation steps
+    for t in  1:n_steps
+        update_agents!(sim)
+        push!(n_depressed, count(p -> (p.state == depressed && p.ses == low), sim.pop))
+        push!(n_healthy, count(p -> (p.state == healthy && p.ses == low), sim.pop))
+        # a bit of output
+        if verbose
+            println(t, ", ", n_depressed[end], ", ", n_healthy[end])
+        end
+    end
+    
+    # return the results (normalized by pop size)
+    n = length(sim.pop)
+    n_depressed./n, n_healthy./n
+end
+function run_sim_middleses(sim, n_steps, verbose = false)
+    # we keep track of the numbers
+    n_depressed = Int[]
+    n_healthy = Int[]
+
+    # simulation steps
+    for t in  1:n_steps
+        update_agents!(sim)
+        push!(n_depressed, count(p -> (p.state == depressed && p.ses == middle), sim.pop))
+        push!(n_healthy, count(p -> (p.state == healthy && p.ses == middle), sim.pop))
+        # a bit of output
+        if verbose
+            println(t, ", ", n_depressed[end], ", ", n_healthy[end])
+        end
+    end
+    
+    # return the results (normalized by pop size)
+    n = length(sim.pop)
+    n_depressed./n, n_healthy./n
+end
+function run_sim_highses(sim, n_steps, verbose = false)
+    # we keep track of the numbers
+    n_depressed = Int[]
+    n_healthy = Int[]
+
+    # simulation steps
+    for t in  1:n_steps
+        update_agents!(sim)
+        push!(n_depressed, count(p -> (p.state == depressed && p.ses == high), sim.pop))
+        push!(n_healthy, count(p -> (p.state == healthy && p.ses == high), sim.pop))
+        # a bit of output
+        if verbose
+            println(t, ", ", n_depressed[end], ", ", n_healthy[end])
+        end
+    end
+    
+    # return the results (normalized by pop size)
+    n = length(sim.pop)
+    n_depressed./n, n_healthy./n
+end
+
 
 # angenommen, dass Möglichkeit zur Therapie von SÖS abhängt
 sim = setup_sim(prev = 0.08, rem = 0.51, rem_ther = 0.45, avail_high = 1.0, avail_middle = 0.5, avail_low = 0.1, prev_parents = 0.26, prev_friends = 0.24, prev_ac = 0.12, prev_child = 0.1, prev_spouse = 0.10, N = 500, n_fam = 100, p_ac = 300/1000, p_friends = 20/1000, n_dep = 0, seed = 42)
 
+#allgemeine Simulation
 depr, heal = run_sim(sim, 500)
 
+#je nach SÖS
+deprlow, heallow = run_sim_lowses(sim, 500)
+deprmiddle, healmiddle = run_sim_middleses(sim, 500)
+deprhigh, healhigh = run_sim_highses(sim,500)
 
 Plots.plot([heal, depr], labels = ["healthy" "depressed"])
-Plots.plot()
+#Plots.plot([heallow, deprlow], labels = ["healthy & low ses" "depressed & low ses"])
+#Plots.plot([healmiddle, deprmiddle], labels = ["healthy & middle ses" "depressed & middle ses"])
+#Plots.plot([healhigh, deprhigh], labels = ["healthy & high ses" "depressed & high ses"])
 
 
