@@ -3,8 +3,6 @@ using Plots
 using DifferentialEquations
 using Distributions
 
-Test 123: Hallo
-
 # all possible states a person can be in
 @enum State healthy depressed
 @enum SES high middle low
