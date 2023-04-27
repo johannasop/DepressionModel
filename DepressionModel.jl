@@ -266,6 +266,7 @@ function run_sim(sim, n_steps, verbose = false)
     n_depressed./n, n_healthy./n
 end
 
+#nur nochmal auf SÖS angepasst, damit ich mir Plots für jeden SÖS anschauen kann
 function run_sim_lowses(sim, n_steps, verbose = false)
     # we keep track of the numbers
     n_depressed = Int[]
