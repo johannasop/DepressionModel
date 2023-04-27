@@ -36,8 +36,14 @@ mutable struct Simulation{AGENT}
     # model parameters:
     # 12-month prevalence 
     prev :: Float64
-    # remission rate
+    # spontaneous remission rate
     rem :: Float64
+    # remission rate with therapy
+    rem_ther :: Float64
+    # availability of therapy
+    avail_high :: Float64
+    avail_middle :: Float64
+    avail_low :: Float64
     # risk of transmission parents
     prev_parents :: Float64
     # risk of transmission children
@@ -86,6 +92,27 @@ function update!(person, sim)
         end
     end
     
+    #Therapie
+    therapy!(person)
+end
+
+function therapy!(person)
+    if person.ses == high && rand()<sim.avail_high
+        if rand() < sim.rem_ther 
+            person.state = healthy
+        end
+    end
+    if person.ses == middle && rand()<sim.avail_middle
+        if rand() < sim.rem_ther 
+            person.state = healthy
+        end
+    end
+    if person.ses == low && rand()<sim.avail_low
+        if rand() < sim.rem_ther 
+            person.state = healthy
+        end
+    end
+
 
 end
 
@@ -140,18 +167,13 @@ function setup_mixed(n, n_fam, p_ac, p_fr)
         push!(last(pop).parents, pop[x])
         push!(pop[x].children, last(pop))
 
-        if rem(x,2)==0
-            push!(pop[x-1].children, last(pop))
-            push!(last(pop).parents, pop[x-1])
-        else
-            push!(pop[x+1].children, last(pop))
-            push!(last(pop).parents, pop[x+1])
-        end
+        #jeweiliger Partner wird als Elternteil eingetragen und bei diesem das Kind gespeichert
+        push!(pop[x].spouse[1].children, last(pop))
+        push!(last(pop).parents, pop[x].spouse[1])
     end
     
     #übrig Gebliebene einsortieren
     append!(pop, men, women)
-    print(length(pop), length(kids))
     
     # go through all combinations of agents and 
     # check if they are connected
@@ -197,10 +219,15 @@ function setup_mixed(n, n_fam, p_ac, p_fr)
       
     end
 
+    #SÖS zuweisen
+    ses = [high, middle, low]
+    for i in eachindex(pop)
+        pop[i].ses = ses[rand(1:3)]
+    end
     return pop
 end
 
-function  setup_sim(;prev, rem, prev_parents, prev_friends, prev_ac, prev_child, prev_spouse, N, n_fam, p_ac, p_friends, n_dep, seed)
+function  setup_sim(;prev, rem, rem_ther, avail_high, avail_middle, avail_low, prev_parents, prev_friends, prev_ac, prev_child, prev_spouse, N, n_fam, p_ac, p_friends, n_dep, seed)
     # for reproducibility
     Random.seed!(seed)
 
@@ -208,7 +235,7 @@ function  setup_sim(;prev, rem, prev_parents, prev_friends, prev_ac, prev_child,
     pop = setup_mixed(N, n_fam, p_ac, p_friends)
 
     # create a simulation object with parameter values
-    sim = Simulation(prev, rem, prev_parents, prev_child, prev_friends, prev_spouse, prev_ac, pop)
+    sim = Simulation(prev, rem, rem_ther, avail_high, avail_middle, avail_low, prev_parents, prev_child, prev_friends, prev_spouse, prev_ac, pop)
     
             #for i in 1:n_dep --> brauche ich doch eigentlich nicht, weil man sich nicht anstecken MUSS
                 # one percent of agents are "infected"
@@ -240,13 +267,13 @@ function run_sim(sim, n_steps, verbose = false)
 end
 
 
-
-sim = setup_sim(prev = 0.08, rem = 0.51, prev_parents = 0.26, prev_friends = 0.24, prev_ac = 0.12, prev_child = 0.1, prev_spouse = 0.10, N = 500, n_fam = 100, p_ac = 300/1000, p_friends = 20/1000, n_dep = 0, seed = 42)
+# angenommen, dass Möglichkeit zur Therapie von SÖS abhängt
+sim = setup_sim(prev = 0.08, rem = 0.51, rem_ther = 0.45, avail_high = 1.0, avail_middle = 0.5, avail_low = 0.1, prev_parents = 0.26, prev_friends = 0.24, prev_ac = 0.12, prev_child = 0.1, prev_spouse = 0.10, N = 500, n_fam = 100, p_ac = 300/1000, p_friends = 20/1000, n_dep = 0, seed = 42)
 
 depr, heal = run_sim(sim, 500)
 
 
 Plots.plot([heal, depr], labels = ["healthy" "depressed"])
-
+Plots.plot()
 
 
