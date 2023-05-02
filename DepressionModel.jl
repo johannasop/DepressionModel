@@ -63,10 +63,10 @@ function update!(person, sim)
     if rand() < sim.prev
         person.state = depressed
     end
-    if person.state == depressed && rand() < sim.rem
-        person.state = healthy
+    #Personen mit hohem SÖS müssen keine Wartezeit für eine Therapie in Anspruch nehmen
+    if person.ses == high 
+        therapy!(person)
     end
-    
     
     for p in person.parents 
         if rand(person.parents) == depressed && rand() < sim.prev_parents
@@ -91,9 +91,15 @@ function update!(person, sim)
         person.state = depressed
         end
     end
-    
-    #Therapie
-    therapy!(person)
+
+    #Spontanremmisionen erst nach Ende des Durchlaufes
+    if person.state == depressed && rand() < sim.rem
+        person.state = healthy
+    end
+    #Therapie für Personen, die keinen hohen SÖS haben: diese müssen erst warten, bevor sie Therapie in Anspruch nehmen können
+    if person.ses != high
+        therapy!(person)
+    end
 end
 
 function therapy!(person)
@@ -330,15 +336,15 @@ end
 
 
 # angenommen, dass Möglichkeit zur Therapie von SÖS abhängt
-sim = setup_sim(prev = 0.08, rem = 0.51, rem_ther = 0.45, avail_high = 1.0, avail_middle = 0.5, avail_low = 0.1, prev_parents = 0.26, prev_friends = 0.24, prev_ac = 0.12, prev_child = 0.1, prev_spouse = 0.10, N = 500, n_fam = 100, p_ac = 300/1000, p_friends = 20/1000, n_dep = 0, seed = 42)
+sim = setup_sim(prev = 0.08, rem = 0.51, rem_ther = 0.45, avail_high = 1.0, avail_middle = 0.5, avail_low = 0.0, prev_parents = 0.26, prev_friends = 0.24, prev_ac = 0.12, prev_child = 0.1, prev_spouse = 0.10, N = 500, n_fam = 100, p_ac = 300/1000, p_friends = 20/1000, n_dep = 0, seed = 42)
 
 #allgemeine Simulation
-depr, heal = run_sim(sim, 500)
+depr, heal = run_sim(sim, 50)
 
 #je nach SÖS
-deprlow, heallow = run_sim_lowses(sim, 500)
-deprmiddle, healmiddle = run_sim_middleses(sim, 500)
-deprhigh, healhigh = run_sim_highses(sim,500)
+deprlow, heallow = run_sim_lowses(sim, 50)
+deprmiddle, healmiddle = run_sim_middleses(sim, 50)
+deprhigh, healhigh = run_sim_highses(sim, 50)
 
 Plots.plot([heal, depr], labels = ["healthy" "depressed"])
 #Plots.plot([heallow, deprlow], labels = ["healthy & low ses" "depressed & low ses"])
