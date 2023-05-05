@@ -2,6 +2,8 @@ using Random
 using Plots
 using DifferentialEquations
 using Distributions
+using CSV
+using DataFrames
 
 # all possible states a person can be in
 @enum State healthy depressed
@@ -22,11 +24,14 @@ mutable struct SimplePerson
     state::State
     
     ses::SES
+
+    prob_ther::Float64
+
 end
 
 # how we construct a person object
-SimplePerson() = SimplePerson([], [], [], [], [], 0, healthy, middle)   # default Person is susceptible and has no contacts
-SimplePerson(state) = SimplePerson([], [], [], [], [], 0, state, middle)  # default Person has no contacts
+SimplePerson() = SimplePerson([], [], [], [], [], 0, healthy, middle, 0)   # default Person is susceptible and has no contacts
+SimplePerson(state) = SimplePerson([], [], [], [], [], 0, state, middle, 0)  # default Person has no contacts
 
 
 # this is a parametric type
@@ -63,10 +68,7 @@ function update!(person, sim)
     if rand() < sim.prev
         person.state = depressed
     end
-    #Personen mit hohem SÖS müssen keine Wartezeit für eine Therapie in Anspruch nehmen
-    if person.ses == high 
-        therapy!(person)
-    end
+   
     
     for p in person.parents 
         if rand(person.parents) == depressed && rand() < sim.prev_parents
@@ -92,33 +94,33 @@ function update!(person, sim)
         end
     end
 
-    #Spontanremmisionen erst nach Ende des Durchlaufes
+    #Spontanremmisionen 
     if person.state == depressed && rand() < sim.rem
         person.state = healthy
     end
-    #Therapie für Personen, die keinen hohen SÖS haben: diese müssen erst warten, bevor sie Therapie in Anspruch nehmen können
-    if person.ses != high
-        therapy!(person)
-    end
+
+    therapy!(person, sim)
 end
 
-function therapy!(person)
-    if person.ses == high && rand()<sim.avail_high
-        if rand() < sim.rem_ther 
-            person.state = healthy
-        end
-    end
-    if person.ses == middle && rand()<sim.avail_middle
-        if rand() < sim.rem_ther 
-            person.state = healthy
-        end
-    end
-    if person.ses == low && rand()<sim.avail_low
-        if rand() < sim.rem_ther 
-            person.state = healthy
-        end
-    end
+function therapy!(person, sim)
 
+    #Wahrscheinlichkeit sich in Therapie zu begeben in Abhängigkeit des SÖS
+    if person.ses == high 
+        person.prob_ther = sim.avail_high
+    end
+    if person.ses == middle 
+        person.prob_ther = sim.avail_middle
+    end
+    if person.ses == low 
+        person.prob_ther = sim.avail_low
+    end
+    
+    #Annahme, dass Therapiemotivation mit weniger Erfolg sinkt
+    if rand() < person.prob_ther && rand() < sim.rem_ther
+        person.state = healthy
+    else
+        person.prob_ther = person.prob_ther - 0.1
+    end
 
 end
 
@@ -142,6 +144,48 @@ function setup_mixed(n, n_fam, p_ac, p_fr)
     women = [ SimplePerson() for i=1:(n/2-n/10)]
     kids = [ SimplePerson() for i=1:(n/5)]
 
+
+    #Erwachsenen und Kindern ein Alter zuordnen
+    data_grownups = CSV.read(joinpath(@__DIR__, "pop_pyramid_2020_Erwachsene.csv"), DataFrame)
+    age_data_m = data_grownups.males
+    age_data_f = data_grownups.females
+    
+
+    d_sum = cumsum(age_data_m)
+    for i in eachindex(men)
+        r = rand(1:d_sum[end])
+        idx = searchsortedfirst(d_sum, r)
+
+        men[i].age = data_grownups.age[idx]
+    end
+
+    d_sum = cumsum(age_data_f)
+    for i in eachindex(women)
+        r = rand(1:d_sum[end])
+        idx = searchsortedfirst(d_sum, r)
+
+        women[i].age = data_grownups.age[idx]
+    end
+
+    data_kids = CSV.read(joinpath(@__DIR__,"pop_pyramid_2020_Kinder.csv"), DataFrame)
+    age_data_kids = data_kids.males
+
+    d_sum = cumsum(age_data_kids)
+    for i in eachindex(kids)
+        r = rand(1:d_sum[end])
+        idx = searchsortedfirst(d_sum, r)
+
+        kids[i].age = data_kids.age[idx]
+    end
+
+
+    #Männern einen SÖS zuweisen und diesen dann für den Rest der Familie übernehmen
+     ses = [high, middle, low]
+     for i in eachindex(men)
+         men[i].ses = ses[rand(1:3)]
+     end
+
+
     #erstelle Familien mit Partnern
     for i=1:n_fam
 
@@ -149,6 +193,9 @@ function setup_mixed(n, n_fam, p_ac, p_fr)
         y = rand(1:length(women))
         man = men[x]
         woman = women[y]
+
+        #gleicher SÖS
+        woman.ses = man.ses
 
         #als Partner gegenseitig eintragen, anschließend in Population einfügen
         push!(man.spouse, woman)
@@ -166,8 +213,11 @@ function setup_mixed(n, n_fam, p_ac, p_fr)
 
     #ordne Kinder diesen Partnern zu
     
-    for i=1:trunc(Int, n/5)
+    for i in eachindex(kids)
         x = rand(1:(n_fam*2))   
+
+        #gleicher SÖS wie Eltern
+        kids[i].ses = pop[x].ses 
 
         push!(pop, kids[i])
         push!(last(pop).parents, pop[x])
@@ -178,58 +228,30 @@ function setup_mixed(n, n_fam, p_ac, p_fr)
         push!(last(pop).parents, pop[x].spouse[1])
     end
     
-    #übrig Gebliebene einsortieren
+    #restlichen Frauen auch einen SÖS zuordnen und übrig Gebliebene einsortieren
+    for i in eachindex(women)
+        women[i].ses = ses[rand(1:3)]
+    end
     append!(pop, men, women)
     
+
     # go through all combinations of agents and 
     # check if they are connected
     
     for i in eachindex(pop)
         for j in i+1:length(pop)
-            if rand() < p_ac
+            if rand() < p_ac && !(pop[i] in pop[j].spouse) && !(pop[i] in pop[j].children) && !(pop[i] in pop[j].parents)
                 push!(pop[i].ac, pop[j])
                 push!(pop[j].ac, pop[i])
-            elseif rand() < p_fr
+            elseif rand() < p_fr && !(pop[i] in pop[j].spouse) && !(pop[i] in pop[j].children) && !(pop[i] in pop[j].parents)
                 push!(pop[i].friends, pop[j])
                 push!(pop[j].friends, pop[i])
             end
            
         end
     end
-
-
-    # Alterszuweisung: elegantere Umsetzung
-    #d_sum = cumsum(d)
-    #r = rand(d_sum[end])
-    #idx = searchsortedfirst(d_sum, r) #damit gewichtetes Element
-
-    #vorherige Alterszuweisung
-    for i in eachindex(pop)
-        x = rand(0:100)
-
-        if x > 75.5
-            pop[i].age = rand(60:100)
-        end
-        if x > 49.2 && x <= 75.5
-            pop[i].age = rand(40:59)
-        end
-        if x > 29 && x <= 49.2
-            pop[i].age = rand(25:39)
-        end
-        if x > 20.7 && x <= 29
-            pop[i].age = rand(18:24)
-        end
-        if x > 0 && x <= 20.7
-            pop[i].age = rand(0:17)
-        end
       
-    end
-
-    #SÖS zuweisen
-    ses = [high, middle, low]
-    for i in eachindex(pop)
-        pop[i].ses = ses[rand(1:3)]
-    end
+    
     return pop
 end
 
@@ -242,11 +264,6 @@ function  setup_sim(;prev, rem, rem_ther, avail_high, avail_middle, avail_low, p
 
     # create a simulation object with parameter values
     sim = Simulation(prev, rem, rem_ther, avail_high, avail_middle, avail_low, prev_parents, prev_child, prev_friends, prev_spouse, prev_ac, pop)
-    
-            #for i in 1:n_dep --> brauche ich doch eigentlich nicht, weil man sich nicht anstecken MUSS
-                # one percent of agents are "infected"
-                # sim.pop[i].state = depressed
-            #end
             
     sim
 end
@@ -256,11 +273,29 @@ function run_sim(sim, n_steps, verbose = false)
     n_depressed = Int[]
     n_healthy = Int[]
 
+    n_depressed_high = Int[]
+    n_healthy_high = Int[]
+
+    n_depressed_middle = Int[]
+    n_healthy_middle = Int[]
+
+    n_depressed_low = Int[]
+    n_healthy_low = Int[]
+
     # simulation steps
     for t in  1:n_steps
         update_agents!(sim)
         push!(n_depressed, count(p -> p.state == depressed, sim.pop))
         push!(n_healthy, count(p -> p.state == healthy, sim.pop))
+
+        push!(n_depressed_high, count(p -> p.state == depressed && p.ses == high, sim.pop))
+        push!(n_healthy_high, count(p -> p.state == healthy && p.ses == high, sim.pop))
+
+        push!(n_depressed_middle, count(p -> p.state == depressed && p.ses == middle, sim.pop))
+        push!(n_healthy_middle, count(p -> p.state == healthy && p.ses == middle, sim.pop))
+
+        push!(n_depressed_low, count(p -> p.state == depressed && p.ses == low, sim.pop))
+        push!(n_healthy_low, count(p -> p.state == healthy && p.ses == low, sim.pop))
         # a bit of output
         if verbose
             println(t, ", ", n_depressed[end], ", ", n_healthy[end])
@@ -269,86 +304,20 @@ function run_sim(sim, n_steps, verbose = false)
     
     # return the results (normalized by pop size)
     n = length(sim.pop)
-    n_depressed./n, n_healthy./n
+    n_depressed./n, n_healthy./n , n_depressed_high./n, n_healthy_high./n, n_depressed_middle./n, n_healthy_middle./n,  n_depressed_low./n, n_healthy_low./n
 end
 
-#nur nochmal auf SÖS angepasst, damit ich mir Plots für jeden SÖS anschauen kann
-function run_sim_lowses(sim, n_steps, verbose = false)
-    # we keep track of the numbers
-    n_depressed = Int[]
-    n_healthy = Int[]
 
-    # simulation steps
-    for t in  1:n_steps
-        update_agents!(sim)
-        push!(n_depressed, count(p -> (p.state == depressed && p.ses == low), sim.pop))
-        push!(n_healthy, count(p -> (p.state == healthy && p.ses == low), sim.pop))
-        # a bit of output
-        if verbose
-            println(t, ", ", n_depressed[end], ", ", n_healthy[end])
-        end
-    end
-    
-    # return the results (normalized by pop size)
-    n = length(sim.pop)
-    n_depressed./n, n_healthy./n
-end
-function run_sim_middleses(sim, n_steps, verbose = false)
-    # we keep track of the numbers
-    n_depressed = Int[]
-    n_healthy = Int[]
-
-    # simulation steps
-    for t in  1:n_steps
-        update_agents!(sim)
-        push!(n_depressed, count(p -> (p.state == depressed && p.ses == middle), sim.pop))
-        push!(n_healthy, count(p -> (p.state == healthy && p.ses == middle), sim.pop))
-        # a bit of output
-        if verbose
-            println(t, ", ", n_depressed[end], ", ", n_healthy[end])
-        end
-    end
-    
-    # return the results (normalized by pop size)
-    n = length(sim.pop)
-    n_depressed./n, n_healthy./n
-end
-function run_sim_highses(sim, n_steps, verbose = false)
-    # we keep track of the numbers
-    n_depressed = Int[]
-    n_healthy = Int[]
-
-    # simulation steps
-    for t in  1:n_steps
-        update_agents!(sim)
-        push!(n_depressed, count(p -> (p.state == depressed && p.ses == high), sim.pop))
-        push!(n_healthy, count(p -> (p.state == healthy && p.ses == high), sim.pop))
-        # a bit of output
-        if verbose
-            println(t, ", ", n_depressed[end], ", ", n_healthy[end])
-        end
-    end
-    
-    # return the results (normalized by pop size)
-    n = length(sim.pop)
-    n_depressed./n, n_healthy./n
-end
 
 
 # angenommen, dass Möglichkeit zur Therapie von SÖS abhängt
-sim = setup_sim(prev = 0.08, rem = 0.51, rem_ther = 0.45, avail_high = 1.0, avail_middle = 0.5, avail_low = 0.0, prev_parents = 0.26, prev_friends = 0.24, prev_ac = 0.12, prev_child = 0.1, prev_spouse = 0.10, N = 500, n_fam = 100, p_ac = 300/1000, p_friends = 20/1000, n_dep = 0, seed = 42)
+sim = setup_sim(prev = 0.08, rem = 0.51, rem_ther = 0.45, avail_high = 0.7, avail_middle = 0.4, avail_low = 0.1, prev_parents = 0.26, prev_friends = 0.24, prev_ac = 0.12, prev_child = 0.1, prev_spouse = 0.10, N = 500, n_fam = 100, p_ac = 300/1000, p_friends = 20/1000, n_dep = 0, seed = 42)
 
-#allgemeine Simulation
-depr, heal = run_sim(sim, 50)
 
-#je nach SÖS
-deprlow, heallow = run_sim_lowses(sim, 50)
-deprmiddle, healmiddle = run_sim_middleses(sim, 50)
-deprhigh, healhigh = run_sim_highses(sim, 50)
+depr, heal, deprhigh, healhigh, deprmiddle, healmiddle, deprlow, heallow = run_sim(sim, 50)
 
-Plots.plot([heal, depr], labels = ["healthy" "depressed"])
-#Plots.plot([heallow, deprlow], labels = ["healthy & low ses" "depressed & low ses"])
-#Plots.plot([healmiddle, deprmiddle], labels = ["healthy & middle ses" "depressed & middle ses"])
-#Plots.plot([healhigh, deprhigh], labels = ["healthy & high ses" "depressed & high ses"])
+
+Plots.plot([heal, depr, healhigh, deprhigh, healmiddle, deprmiddle, heallow, deprlow], labels = ["healthy" "depressed" "healthy high ses" "depressed high ses" "healthy middle ses" "depressed middle ses" "healthy low ses" "depressed low ses"])
+
 
 
