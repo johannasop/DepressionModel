@@ -4,6 +4,7 @@ using DifferentialEquations
 using Distributions
 using CSV
 using DataFrames
+using MiniObserve
 
 # all possible states a person can be in
 @enum State healthy depressed
@@ -62,6 +63,8 @@ mutable struct Simulation{AGENT}
 
     # and this is our population of agents
     pop :: Vector{AGENT}
+
+    time::Int64
 end
 
 function update!(person, sim)
@@ -263,7 +266,7 @@ function  setup_sim(;prev, rem, rem_ther, avail_high, avail_middle, avail_low, p
     pop = setup_mixed(N, n_fam, p_ac, p_friends)
 
     # create a simulation object with parameter values
-    sim = Simulation(prev, rem, rem_ther, avail_high, avail_middle, avail_low, prev_parents, prev_child, prev_friends, prev_spouse, prev_ac, pop)
+    sim = Simulation(prev, rem, rem_ther, avail_high, avail_middle, avail_low, prev_parents, prev_child, prev_friends, prev_spouse, prev_ac, pop, 0)
             
     sim
 end
@@ -300,6 +303,10 @@ function run_sim(sim, n_steps, verbose = false)
         if verbose
             println(t, ", ", n_depressed[end], ", ", n_healthy[end])
         end
+        sim.time = sim.time + 1
+        data = observe(Data, sim)
+        log_results(stdout, data)
+
     end
     
     # return the results (normalized by pop size)
@@ -311,7 +318,7 @@ end
 
 
 # angenommen, dass Möglichkeit zur Therapie von SÖS abhängt
-sim = setup_sim(prev = 0.08, rem = 0.51, rem_ther = 0.45, avail_high = 0.7, avail_middle = 0.4, avail_low = 0.1, prev_parents = 0.26, prev_friends = 0.24, prev_ac = 0.12, prev_child = 0.1, prev_spouse = 0.10, N = 500, n_fam = 100, p_ac = 300/1000, p_friends = 20/1000, n_dep = 0, seed = 42)
+sim = setup_sim(prev = 0.08, rem = 0.51, rem_ther = 0.45, avail_high = 0.4, avail_middle = 0.25, avail_low = 0.1, prev_parents = 0.26, prev_friends = 0.24, prev_ac = 0.12, prev_child = 0.1, prev_spouse = 0.10, N = 500, n_fam = 100, p_ac = 300/1000, p_friends = 20/1000, n_dep = 0, seed = 42)
 
 
 depr, heal, deprhigh, healhigh, deprmiddle, healmiddle, deprlow, heallow = run_sim(sim, 50)
@@ -319,5 +326,18 @@ depr, heal, deprhigh, healhigh, deprmiddle, healmiddle, deprlow, heallow = run_s
 
 Plots.plot([heal, depr, healhigh, deprhigh, healmiddle, deprmiddle, heallow, deprlow], labels = ["healthy" "depressed" "healthy high ses" "depressed high ses" "healthy middle ses" "depressed middle ses" "healthy low ses" "depressed low ses"])
 
+@observe Data model begin
+    @record "N" Int length(model.pop)
+    @record "time" model.time
+
+    @for ind in model.pop begin
+        @stat("number of depressed people", CountAcc) <| (ind.state == depressed)
+        @stat("contacts", MaxMinAcc{Float64}, MeanVarAcc{Float64}) <| convert(Float64, (length(ind.parents) + length(ind.children) + length(ind.friends) + length(ind.ac) + length(ind.spouse)))
+        
+    end
+end
+
+
+print_header(stdout, Data)
 
 
