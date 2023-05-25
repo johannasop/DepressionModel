@@ -5,6 +5,7 @@ using Distributions
 using CSV
 using DataFrames
 using MiniObserve
+using Statistics
 
 # all possible states a person can be in
 @enum State healthy depressed
@@ -27,99 +28,100 @@ mutable struct SimplePerson
     ses::SES
 
     prob_ther::Float64
+    susceptibility::Float64
 
 end
 
+mutable struct Parameters
+
+    prev::Float64
+    rem::Float64
+    rem_ther::Float64
+    avail_high::Float64
+    avail_middle::Float64
+    avail_low::Float64
+    prev_parents::Float64
+    prev_friends::Float64
+    prev_ac::Float64
+    prev_child::Float64
+    prev_spouse::Float64
+    n::Int64
+    n_fam::Int64
+    p_ac::Float64
+    p_fr::Float64
+    heritability::Float64
+    n_dep::Int64
+    seed::Int64
+
+end
 # how we construct a person object
-SimplePerson() = SimplePerson([], [], [], [], [], 0, healthy, middle, 0)   # default Person is susceptible and has no contacts
-SimplePerson(state) = SimplePerson([], [], [], [], [], 0, state, middle, 0)  # default Person has no contacts
+SimplePerson() = SimplePerson([], [], [], [], [], 0, healthy, middle, 0, 0)   # default Person is susceptible and has no contacts
+SimplePerson(state) = SimplePerson([], [], [], [], [], 0, state, middle, 0, 0)  # default Person has no contacts
 
 
 # this is a parametric type
 # we can specify which type AGENT is going to be replaced with
 # when constructing our Simulation
 mutable struct Simulation{AGENT}
-    # model parameters:
-    # 12-month prevalence 
-    prev :: Float64
-    # spontaneous remission rate
-    rem :: Float64
-    # remission rate with therapy
-    rem_ther :: Float64
-    # availability of therapy
-    avail_high :: Float64
-    avail_middle :: Float64
-    avail_low :: Float64
-    # risk of transmission parents
-    prev_parents :: Float64
-    # risk of transmission children
-    prev_child :: Float64
-    # risk of transmission friends
-    prev_friends :: Float64
-    # risk of transmission spouse
-    prev_spouse :: Float64
-    # risk of transmission acquaintance
-    prev_ac :: Float64
-
-    # and this is our population of agents
+    
     pop :: Vector{AGENT}
 
     time::Int64
 end
 
-function update!(person, sim)
-    if rand() < sim.prev
+function update!(person, sim, para)
+    if rand() < para.prev
         person.state = depressed
     end
    
     
     for p in person.parents 
-        if rand(person.parents) == depressed && rand() < sim.prev_parents
+        if rand(person.parents) == depressed && rand() < para.prev_parents
         person.state = depressed
         end
     end
     for p in person.children 
-        if rand(person.children) == depressed && rand() < sim.prev_child
+        if rand(person.children) == depressed && rand() < para.prev_child
         person.state = depressed
         end
     end
     for p in person.friends 
-        if rand(person.friends) == depressed && rand() < sim.prev_friends
+        if rand(person.friends) == depressed && rand() < para.prev_friends
         person.state = depressed
         end
     end
-    if length(person.spouse) > 0 && rand(person.spouse) == depressed && rand() < sim.prev_spouse
+    if length(person.spouse) > 0 && rand(person.spouse) == depressed && rand() < para.prev_spouse
         person.state = depressed
     end
     for p in person.ac 
-        if rand(person.ac) == depressed && rand() < sim.prev_ac
+        if rand(person.ac) == depressed && rand() < para.prev_ac
         person.state = depressed
         end
     end
 
     #Spontanremmisionen 
-    if person.state == depressed && rand() < sim.rem
+    if person.state == depressed && rand() < para.rem
         person.state = healthy
     end
 
-    therapy!(person, sim)
+    therapy!(person, para)
 end
 
-function therapy!(person, sim)
+function therapy!(person, para)
 
     #Wahrscheinlichkeit sich in Therapie zu begeben in Abhängigkeit des SÖS
     if person.ses == high 
-        person.prob_ther = sim.avail_high
+        person.prob_ther = para.avail_high
     end
     if person.ses == middle 
-        person.prob_ther = sim.avail_middle
+        person.prob_ther = para.avail_middle
     end
     if person.ses == low 
-        person.prob_ther = sim.avail_low
+        person.prob_ther = para.avail_low
     end
     
     #Annahme, dass Therapiemotivation mit weniger Erfolg sinkt
-    if rand() < person.prob_ther && rand() < sim.rem_ther
+    if rand() < person.prob_ther && rand() < para.rem_ther
         person.state = healthy
     else
         person.prob_ther = person.prob_ther - 0.1
@@ -127,25 +129,25 @@ function therapy!(person, sim)
 
 end
 
-function update_agents!(sim)
+function update_agents!(sim, para)
     # we need to change the order, otherwise agents at the beginning of the 
     # pop array will behave differently from those further in the back
     order = shuffle(sim.pop)
     
     for p in order
-        update!(p, sim)
+        update!(p, sim, para)
     end
 end   
 
 
 # set up a mixed population
 # p_contact is the probability that two agents are connected
-function setup_mixed(n, n_fam, p_ac, p_fr)
+function setup_mixed(para)
     
     pop = []
-    men = [ SimplePerson() for i=1:(n/2-n/10)]
-    women = [ SimplePerson() for i=1:(n/2-n/10)]
-    kids = [ SimplePerson() for i=1:(n/5)]
+    men = [ SimplePerson() for i=1:(para.n/2-para.n/10)]
+    women = [ SimplePerson() for i=1:(para.n/2-para.n/10)]
+    kids = [ SimplePerson() for i=1:(para.n/5)]
 
 
     #Erwachsenen und Kindern ein Alter zuordnen
@@ -186,19 +188,21 @@ function setup_mixed(n, n_fam, p_ac, p_fr)
      ses = [high, middle, low]
      for i in eachindex(men)
          men[i].ses = ses[rand(1:3)]
+         #men[i].susceptibility = rand(Normal(0.1, 0.1))
      end
 
 
     #erstelle Familien mit Partnern
-    for i=1:n_fam
+    for i=1:para.n_fam
 
         x = rand(1:length(men))
         y = rand(1:length(women))
         man = men[x]
         woman = women[y]
 
-        #gleicher SÖS
+        #gleicher SÖS aber andere susceptibility
         woman.ses = man.ses
+        woman.susceptibility = man.susceptibility
 
         #als Partner gegenseitig eintragen, anschließend in Population einfügen
         push!(man.spouse, woman)
@@ -217,10 +221,12 @@ function setup_mixed(n, n_fam, p_ac, p_fr)
     #ordne Kinder diesen Partnern zu
     
     for i in eachindex(kids)
-        x = rand(1:(n_fam*2))   
+        x = rand(1:(para.n_fam*2))   
 
-        #gleicher SÖS wie Eltern
+        #gleicher SÖS wie Eltern, susceptibility als Mittelwert der susceptibility der Eltern plus einem kleinen Wert aus Normalverteilung
         kids[i].ses = pop[x].ses 
+        #kids[i].susceptibility = (pop[x].susceptibility) + rand(Normal(0.0, 0.1)) 
+
 
         push!(pop, kids[i])
         push!(last(pop).parents, pop[x])
@@ -243,10 +249,10 @@ function setup_mixed(n, n_fam, p_ac, p_fr)
     
     for i in eachindex(pop)
         for j in i+1:length(pop)
-            if rand() < p_ac && !(pop[i] in pop[j].spouse) && !(pop[i] in pop[j].children) && !(pop[i] in pop[j].parents)
+            if rand() < para.p_ac && !(pop[i] in pop[j].spouse) && !(pop[i] in pop[j].children) && !(pop[i] in pop[j].parents)
                 push!(pop[i].ac, pop[j])
                 push!(pop[j].ac, pop[i])
-            elseif rand() < p_fr && !(pop[i] in pop[j].spouse) && !(pop[i] in pop[j].children) && !(pop[i] in pop[j].parents)
+            elseif rand() < para.p_fr && !(pop[i] in pop[j].spouse) && !(pop[i] in pop[j].children) && !(pop[i] in pop[j].parents)
                 push!(pop[i].friends, pop[j])
                 push!(pop[j].friends, pop[i])
             end
@@ -258,20 +264,21 @@ function setup_mixed(n, n_fam, p_ac, p_fr)
     return pop
 end
 
-function  setup_sim(;prev, rem, rem_ther, avail_high, avail_middle, avail_low, prev_parents, prev_friends, prev_ac, prev_child, prev_spouse, N, n_fam, p_ac, p_friends, n_dep, seed)
+function  setup_sim(;prev, rem, rem_ther, avail_high, avail_middle, avail_low, prev_parents, prev_friends, prev_ac, prev_child, prev_spouse, N, n_fam, p_ac, p_friends, heritability, n_dep, seed)
     # for reproducibility
     Random.seed!(seed)
 
+    para = Parameters(prev, rem, rem_ther, avail_high, avail_middle, avail_low, prev_parents, prev_friends, prev_ac, prev_child, prev_spouse, N, n_fam, p_ac, p_friends, heritability, n_dep, seed)
+
     # create a population of agents, fully mixed
-    pop = setup_mixed(N, n_fam, p_ac, p_friends)
+    pop = setup_mixed(para)
 
     # create a simulation object with parameter values
-    sim = Simulation(prev, rem, rem_ther, avail_high, avail_middle, avail_low, prev_parents, prev_child, prev_friends, prev_spouse, prev_ac, pop, 0)
-            
-    sim
+    sim = Simulation(pop, 0)
+    sim, para
 end
 
-function run_sim(sim, n_steps, verbose = false)
+function run_sim(sim, n_steps, para, verbose = false)
     # we keep track of the numbers
     n_depressed = Int[]
     n_healthy = Int[]
@@ -287,7 +294,7 @@ function run_sim(sim, n_steps, verbose = false)
 
     # simulation steps
     for t in  1:n_steps
-        update_agents!(sim)
+        update_agents!(sim, para)
         push!(n_depressed, count(p -> p.state == depressed, sim.pop))
         push!(n_healthy, count(p -> p.state == healthy, sim.pop))
 
@@ -304,8 +311,8 @@ function run_sim(sim, n_steps, verbose = false)
             println(t, ", ", n_depressed[end], ", ", n_healthy[end])
         end
         sim.time = sim.time + 1
-        data = observe(Data, sim)
-        log_results(stdout, data)
+        #data = observe(Data, sim)
+        #log_results(stdout, data)
 
     end
     
@@ -318,26 +325,50 @@ end
 
 
 # angenommen, dass Möglichkeit zur Therapie von SÖS abhängt
-sim = setup_sim(prev = 0.08, rem = 0.51, rem_ther = 0.45, avail_high = 0.4, avail_middle = 0.25, avail_low = 0.1, prev_parents = 0.26, prev_friends = 0.24, prev_ac = 0.12, prev_child = 0.1, prev_spouse = 0.10, N = 500, n_fam = 100, p_ac = 300/1000, p_friends = 20/1000, n_dep = 0, seed = 42)
+sim, para = setup_sim(prev = 0.08, rem = 0.51, rem_ther = 0.45, avail_high = 0.4, avail_middle = 0.25, avail_low = 0.1, prev_parents = 0.26, prev_friends = 0.24, prev_ac = 0.12, prev_child = 0.1, prev_spouse = 0.10, N = 500, n_fam = 100, p_ac = 300/1000, p_friends = 20/1000, heritability = 0.35, n_dep = 0, seed = 42)
 
 
-depr, heal, deprhigh, healhigh, deprmiddle, healmiddle, deprlow, heallow = run_sim(sim, 50)
+depr, heal, deprhigh, healhigh, deprmiddle, healmiddle, deprlow, heallow = run_sim(sim, 50, para)
 
 
 Plots.plot([heal, depr, healhigh, deprhigh, healmiddle, deprmiddle, heallow, deprlow], labels = ["healthy" "depressed" "healthy high ses" "depressed high ses" "healthy middle ses" "depressed middle ses" "healthy low ses" "depressed low ses"])
 
-@observe Data model begin
-    @record "N" Int length(model.pop)
-    @record "time" model.time
 
-    @for ind in model.pop begin
-        @stat("number of depressed people", CountAcc) <| (ind.state == depressed)
-        @stat("contacts", MaxMinAcc{Float64}, MeanVarAcc{Float64}) <| convert(Float64, (length(ind.parents) + length(ind.children) + length(ind.friends) + length(ind.ac) + length(ind.spouse)))
-        
-    end
-end
+#Korrelation checken
+#kids_sus = []
+#parents_sus = []
+
+#for i in eachindex(sim.pop)
+#    if !isempty(sim.pop[i].parents)
+#            push!(parents_sus, (sim.pop[i].parents[1].susceptibility+sim.pop[i].parents[2].susceptibility/2))
+#            push!(kids_sus, sim.pop[i].susceptibility)
+#    end
+#end
+
+#Statistics.cor(kids_sus, parents_sus)
 
 
-print_header(stdout, Data)
+
+#für jede Person Anzahl der Kontakte, SÖS usw. ausgeben
+#for i in eachindex(sim.pop)
+#    print("\n", i, " SÖS: ", sim.pop[i].ses, " Anzahl der Kontakte: ", length(sim.pop[i].parents) + length(sim.pop[i].friends) + length(sim.pop[i].ac) + length(sim.pop[i].children) + length(sim.pop[i].spouse), " Zustand: ", sim.pop[i].state)
+#end
+
+
+
+#Variablen über komplette Population ausgeben
+#@observe Data model begin
+#    @record "N" Int length(model.pop)
+#    @record "time" model.time
+#
+#    @for ind in model.pop begin
+#        @stat("number of depressed people", CountAcc) <| (ind.state == depressed)
+#        @stat("contacts", MaxMinAcc{Float64}, MeanVarAcc{Float64}) <| convert(Float64, (length(ind.parents) + length(ind.children) + length(ind.friends) + length(ind.ac) + length(ind.spouse)))
+#        
+#    end
+#end
+#print_header(stdout, Data)
+
+
 
 
