@@ -32,26 +32,33 @@ mutable struct SimplePerson
 
 end
 
-mutable struct Parameters
+Base.@kwdef mutable struct Parameters
 
-    prev::Float64
-    rem::Float64
-    rem_ther::Float64
-    avail_high::Float64
-    avail_middle::Float64
-    avail_low::Float64
-    prev_parents::Float64
-    prev_friends::Float64
-    prev_ac::Float64
-    prev_child::Float64
-    prev_spouse::Float64
-    n::Int64
-    n_fam::Int64
-    p_ac::Float64
-    p_fr::Float64
-    heritability::Float64
-    n_dep::Int64
-    seed::Int64
+    prev::Float64 = 0.08
+    rem::Float64 = 0.51
+    rem_ther::Float64 = 0.45
+    avail_high::Float64 = 0.5
+    avail_middle::Float64 = 0.2
+    avail_low::Float64 = 0.1
+    f_parents::Float64 = 2.38
+    f_friends::Float64 = 4.5
+    f_ac::Float64 = 1.5
+    f_child::Float64 = 1.25
+    f_spouse::Float64 = 1.5
+    n::Int64 = 1000
+    n_fam::Int64 = 300
+    p_ac::Float64 = 300/1000
+    p_fr::Float64 = 10/1000
+    seed::Int64 = 42
+
+    #Breite der Verteilung der susceptibility
+    b::Float64 = 0.1
+
+    #Heritabilitätsindex(?)
+    h::Float64 = 0.4
+
+    #Resilienzfaktor: nur eine grobe Überlegung: 1 bedeutet kein Einfluss
+    res::Float64 = 1.0
 
 end
 # how we construct a person object
@@ -70,37 +77,66 @@ mutable struct Simulation{AGENT}
 end
 
 function update!(person, sim, para)
-    if rand() < para.prev
-        person.state = depressed
-    end
-   
-    
+   #die Update-Funktion sieht ganz anders aus, weil ich einen Fehler bemerkt habe: bei der vorherigen Ansteckung wurde nie über .state der Status
+   #abgefragt, sondern ungefähr so: if person == depressed 
+   #daher gab es nie eine Ansteckung! Bei der Änderung habe ich gesehen, dass das Risiko massiv überschätzt wird (80% wurden depressiv)
+   #deshalb wird nun geschaut: gibt es in dieser Gruppe eine depressive Person? wenn über mehrere Gruppen, dann wird das Risiko gemittelt
+    parents = []
+    friends = []
+    children = []
+    ac = []
+
     for p in person.parents 
-        if rand(person.parents) == depressed && rand() < para.prev_parents
-        person.state = depressed
-        end
+       push!(parents, p.state)
     end
     for p in person.children 
-        if rand(person.children) == depressed && rand() < para.prev_child
-        person.state = depressed
-        end
+        push!(children, p.state)
     end
     for p in person.friends 
-        if rand(person.friends) == depressed && rand() < para.prev_friends
-        person.state = depressed
-        end
-    end
-    if length(person.spouse) > 0 && rand(person.spouse) == depressed && rand() < para.prev_spouse
-        person.state = depressed
+        push!(friends, p.state)
     end
     for p in person.ac 
-        if rand(person.ac) == depressed && rand() < para.prev_ac
-        person.state = depressed
-        end
+        push!(ac, p.state)
     end
 
+    rate = 0
+    if depressed in parents 
+        rate += para.prev * para.f_parents
+    else
+        #noch unsicher, ob es sinnvoller ist hier die Prävalenz einzufügen, oder zu sagen: jeder, der keine depressiven Eltern hat, hat ein GERINGERES Risiko und ist quasi resilienter: kann oben über para.res angepasst werden
+        rate += (para.prev/para.res)
+    end
+
+    if depressed in children 
+        rate += para.prev * para.f_child
+    else 
+        rate += para.prev
+    end
+
+    if depressed in friends 
+        rate += para.prev * para.f_friends
+    else
+        rate += (para.prev/para.res)
+    end
+
+    if depressed in ac  
+        rate += para.prev * para.f_ac
+    else
+        rate += (para.prev)
+    end
+
+    if length(person.spouse) > 0 && person.spouse[1].state == depressed 
+        rate += para.prev * para.f_spouse
+    else
+        rate += (para.prev)
+    end
+
+    if rand() < ratetoprob((rate/5) * person.susceptibility)
+        person.state = depressed
+    end
+  
     #Spontanremmisionen 
-    if person.state == depressed && rand() < para.rem
+    if rand() < ratetoprob(para.rem) && person.state == depressed 
         person.state = healthy
     end
 
@@ -121,12 +157,18 @@ function therapy!(person, para)
     end
     
     #Annahme, dass Therapiemotivation mit weniger Erfolg sinkt
-    if rand() < person.prob_ther && rand() < para.rem_ther
+    if rand() < person.prob_ther && rand() < ratetoprob(para.rem_ther)
         person.state = healthy
-    else
+    elseif (person.prob_ther - 0.1) > 0
         person.prob_ther = person.prob_ther - 0.1
     end
 
+end
+
+function ratetoprob(r)
+
+    
+    return r * exp(-r)
 end
 
 function update_agents!(sim, para)
@@ -188,7 +230,7 @@ function setup_mixed(para)
      ses = [high, middle, low]
      for i in eachindex(men)
          men[i].ses = ses[rand(1:3)]
-         #men[i].susceptibility = rand(Normal(0.1, 0.1))
+         men[i].susceptibility = rand(Normal(1,para.b))
      end
 
 
@@ -202,13 +244,14 @@ function setup_mixed(para)
 
         #gleicher SÖS aber andere susceptibility
         woman.ses = man.ses
-        woman.susceptibility = man.susceptibility
+        woman.susceptibility = rand(Normal(1, para.b))
 
         #als Partner gegenseitig eintragen, anschließend in Population einfügen
         push!(man.spouse, woman)
         push!(woman.spouse, man)
         push!(pop, man)
         push!(pop, woman)
+        
 
         #letzte Person auf diese Stelle kopieren und anschließend letzte Person löschen
         men[x] = last(men)
@@ -225,7 +268,9 @@ function setup_mixed(para)
 
         #gleicher SÖS wie Eltern, susceptibility als Mittelwert der susceptibility der Eltern plus einem kleinen Wert aus Normalverteilung
         kids[i].ses = pop[x].ses 
-        #kids[i].susceptibility = (pop[x].susceptibility) + rand(Normal(0.0, 0.1)) 
+
+        #die sus der Kinder besteht zu einem Teil aus der der Eltern und zu einem Teil aus Umwelteinflüssen: Anteile können über para.h verändert werden
+        kids[i].susceptibility =  (para.h * ((pop[x].susceptibility + pop[x].spouse[1].susceptibility)/2) + ((1-para.h) * rand(Normal(1,para.b))))
 
 
         push!(pop, kids[i])
@@ -240,6 +285,7 @@ function setup_mixed(para)
     #restlichen Frauen auch einen SÖS zuordnen und übrig Gebliebene einsortieren
     for i in eachindex(women)
         women[i].ses = ses[rand(1:3)]
+        women[i].susceptibility = rand(Normal(1,para.b))
     end
     append!(pop, men, women)
     
@@ -264,11 +310,12 @@ function setup_mixed(para)
     return pop
 end
 
-function  setup_sim(;prev, rem, rem_ther, avail_high, avail_middle, avail_low, prev_parents, prev_friends, prev_ac, prev_child, prev_spouse, N, n_fam, p_ac, p_friends, heritability, n_dep, seed)
+function  setup_sim()
+    para = Parameters()
     # for reproducibility
-    Random.seed!(seed)
+    Random.seed!(para.seed)
 
-    para = Parameters(prev, rem, rem_ther, avail_high, avail_middle, avail_low, prev_parents, prev_friends, prev_ac, prev_child, prev_spouse, N, n_fam, p_ac, p_friends, heritability, n_dep, seed)
+    
 
     # create a population of agents, fully mixed
     pop = setup_mixed(para)
@@ -325,50 +372,9 @@ end
 
 
 # angenommen, dass Möglichkeit zur Therapie von SÖS abhängt
-sim, para = setup_sim(prev = 0.08, rem = 0.51, rem_ther = 0.45, avail_high = 0.4, avail_middle = 0.25, avail_low = 0.1, prev_parents = 0.26, prev_friends = 0.24, prev_ac = 0.12, prev_child = 0.1, prev_spouse = 0.10, N = 500, n_fam = 100, p_ac = 300/1000, p_friends = 20/1000, heritability = 0.35, n_dep = 0, seed = 42)
-
+sim, para = setup_sim()
 
 depr, heal, deprhigh, healhigh, deprmiddle, healmiddle, deprlow, heallow = run_sim(sim, 50, para)
 
 
 Plots.plot([heal, depr, healhigh, deprhigh, healmiddle, deprmiddle, heallow, deprlow], labels = ["healthy" "depressed" "healthy high ses" "depressed high ses" "healthy middle ses" "depressed middle ses" "healthy low ses" "depressed low ses"])
-
-
-#Korrelation checken
-#kids_sus = []
-#parents_sus = []
-
-#for i in eachindex(sim.pop)
-#    if !isempty(sim.pop[i].parents)
-#            push!(parents_sus, (sim.pop[i].parents[1].susceptibility+sim.pop[i].parents[2].susceptibility/2))
-#            push!(kids_sus, sim.pop[i].susceptibility)
-#    end
-#end
-
-#Statistics.cor(kids_sus, parents_sus)
-
-
-
-#für jede Person Anzahl der Kontakte, SÖS usw. ausgeben
-#for i in eachindex(sim.pop)
-#    print("\n", i, " SÖS: ", sim.pop[i].ses, " Anzahl der Kontakte: ", length(sim.pop[i].parents) + length(sim.pop[i].friends) + length(sim.pop[i].ac) + length(sim.pop[i].children) + length(sim.pop[i].spouse), " Zustand: ", sim.pop[i].state)
-#end
-
-
-
-#Variablen über komplette Population ausgeben
-#@observe Data model begin
-#    @record "N" Int length(model.pop)
-#    @record "time" model.time
-#
-#    @for ind in model.pop begin
-#        @stat("number of depressed people", CountAcc) <| (ind.state == depressed)
-#        @stat("contacts", MaxMinAcc{Float64}, MeanVarAcc{Float64}) <| convert(Float64, (length(ind.parents) + length(ind.children) + length(ind.friends) + length(ind.ac) + length(ind.spouse)))
-#        
-#    end
-#end
-#print_header(stdout, Data)
-
-
-
-
