@@ -17,6 +17,7 @@ mutable struct SimplePerson
     friends :: Vector{SimplePerson}
     parents :: Vector{SimplePerson}
     children :: Vector{SimplePerson}
+    # warum ein Vector?
     spouse :: Vector{SimplePerson}
     ac :: Vector{SimplePerson}
 
@@ -86,7 +87,9 @@ function update!(person, sim, para)
     friends = false
     children = false
     ac = false
-
+    
+    # einfacher:
+    # parents = findfirst(p->p.state==depressed, person.parents) != nothing
     for p in person.parents 
        if p.state == depressed 
         parents = true
@@ -128,7 +131,8 @@ function update!(person, sim, para)
     if length(person.spouse) > 0 && person.spouse[1].state == depressed 
         rate += para.rate_spouse
     end
-
+    
+    # ich wuerde wahrscheinlich eher prev einfach zu rate addieren
     if rate == 0
         rate = para.prev
     end
@@ -203,6 +207,8 @@ function setup_mixed(para)
 
     d_sum = cumsum(age_data_m)
     for i in eachindex(men)
+	    # das ist nicht ganz richtig (aber wahrschinlich nicht relevant), 
+	    # sollte sein: rand() * d_sum[end]
         r = rand(1:d_sum[end])
         idx = searchsortedfirst(d_sum, r)
 
@@ -394,7 +400,8 @@ Plots.plot([heal, depr, healhigh, deprhigh, healmiddle, deprmiddle, heallow, dep
 #Ratenberechnung zur Überprüfung
 function ratedep()
     counter = 0
-
+    
+    # count(p->p.state==depressed, sim.pop)
     for p in sim.pop
         if p.state == depressed
             counter += 1
