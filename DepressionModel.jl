@@ -29,41 +29,42 @@ mutable struct SimplePerson
 
     prob_ther::Float64
     susceptibility::Float64
+    risk::Float64
 
 end
 
 Base.@kwdef mutable struct Parameters
 
-    prev::Float64 = 0.08
+    prev::Float64 = 0.1
     rem::Float64 = 0.51
     rem_ther::Float64 = 0.45
     avail_high::Float64 = 0.5
     avail_middle::Float64 = 0.2
     avail_low::Float64 = 0.1
-    f_parents::Float64 = 2.38
-    f_friends::Float64 = 4.5
-    f_ac::Float64 = 1.5
-    f_child::Float64 = 1.25
-    f_spouse::Float64 = 1.5
+    rate_parents::Float64 = 0.026
+    rate_friends::Float64 = 0.04
+    rate_ac::Float64 = 0.012
+    rate_child::Float64 = 0.05
+    rate_spouse::Float64 = 0.012
     n::Int64 = 1000
     n_fam::Int64 = 300
-    p_ac::Float64 = 300/1000
+    p_ac::Float64 = 50/1000
     p_fr::Float64 = 10/1000
-    seed::Int64 = 42
+    seed::Int64 = 12
 
     #Breite der Verteilung der susceptibility
     b::Float64 = 0.1
 
     #Heritabilitätsindex(?)
-    h::Float64 = 0.4
+    h::Float64 = 0.3
 
-    #Resilienzfaktor: nur eine grobe Überlegung: 1 bedeutet kein Einfluss
+    #Resilienzfaktor?
     res::Float64 = 1.0
 
 end
 # how we construct a person object
-SimplePerson() = SimplePerson([], [], [], [], [], 0, healthy, middle, 0, 0)   # default Person is susceptible and has no contacts
-SimplePerson(state) = SimplePerson([], [], [], [], [], 0, state, middle, 0, 0)  # default Person has no contacts
+SimplePerson() = SimplePerson([], [], [], [], [], 0, healthy, middle, 0, 0, 0)   # default Person is susceptible and has no contacts
+SimplePerson(state) = SimplePerson([], [], [], [], [], 0, state, middle, 0, 0, 0)  # default Person has no contacts
 
 
 # this is a parametric type
@@ -81,57 +82,59 @@ function update!(person, sim, para)
    #abgefragt, sondern ungefähr so: if person == depressed 
    #daher gab es nie eine Ansteckung! Bei der Änderung habe ich gesehen, dass das Risiko massiv überschätzt wird (80% wurden depressiv)
    #deshalb wird nun geschaut: gibt es in dieser Gruppe eine depressive Person? wenn über mehrere Gruppen, dann wird das Risiko gemittelt
-    parents = []
-    friends = []
-    children = []
-    ac = []
+    parents = false
+    friends = false
+    children = false
+    ac = false
 
     for p in person.parents 
-       push!(parents, p.state)
+       if p.state == depressed 
+        parents = true
+       end
     end
     for p in person.children 
-        push!(children, p.state)
+        if p.state == depressed 
+            children = true
+        end    
     end
     for p in person.friends 
-        push!(friends, p.state)
+        if p.state == depressed 
+            friends = true
+        end
     end
     for p in person.ac 
-        push!(ac, p.state)
+        if p.state == depressed 
+            ac = true
+        end
     end
 
     rate = 0
-    if depressed in parents 
-        rate += para.prev * para.f_parents
-    else
-        #noch unsicher, ob es sinnvoller ist hier die Prävalenz einzufügen, oder zu sagen: jeder, der keine depressiven Eltern hat, hat ein GERINGERES Risiko und ist quasi resilienter: kann oben über para.res angepasst werden
-        rate += (para.prev/para.res)
+    if parents
+        rate += para.rate_parents
     end
 
-    if depressed in children 
-        rate += para.prev * para.f_child
-    else 
-        rate += para.prev
+    if children 
+        rate += para.rate_child
     end
 
-    if depressed in friends 
-        rate += para.prev * para.f_friends
-    else
-        rate += (para.prev/para.res)
+    if friends
+        rate += para.rate_friends
     end
 
-    if depressed in ac  
-        rate += para.prev * para.f_ac
-    else
-        rate += (para.prev)
+    if ac 
+        rate += para.rate_ac
     end
 
     if length(person.spouse) > 0 && person.spouse[1].state == depressed 
-        rate += para.prev * para.f_spouse
-    else
-        rate += (para.prev)
+        rate += para.rate_spouse
     end
 
-    if rand() < ratetoprob((rate/5) * person.susceptibility)
+    if rate == 0
+        rate = para.prev
+    end
+
+    person.risk = ratetoprob(rate * person.susceptibility)
+    if rand() < person.risk
         person.state = depressed
     end
   
@@ -378,3 +381,168 @@ depr, heal, deprhigh, healhigh, deprmiddle, healmiddle, deprlow, heallow = run_s
 
 
 Plots.plot([heal, depr, healhigh, deprhigh, healmiddle, deprmiddle, heallow, deprlow], labels = ["healthy" "depressed" "healthy high ses" "depressed high ses" "healthy middle ses" "depressed middle ses" "healthy low ses" "depressed low ses"])
+
+
+
+
+
+
+
+
+
+
+#Ratenberechnung zur Überprüfung
+function ratedep()
+    counter = 0
+
+    for p in sim.pop
+        if p.state == depressed
+            counter += 1
+        end
+    end
+
+    return counter/length(sim.pop)
+end
+
+function ratedep_parents()
+    popcounter_parents = 0
+    deprcounter_parents = 0
+
+    for p in sim.pop 
+        
+        de = false
+        for i in p.parents 
+            if i.state == depressed
+                de = true
+            end
+        end
+
+        if de
+            popcounter_parents+= 1
+            if p.state == depressed 
+                deprcounter_parents +=1
+            end
+        end
+        
+    end
+    return deprcounter_parents/popcounter_parents
+end
+
+function ratedep_friends()
+    popcounter_friends = 0
+    deprcounter_friends = 0
+
+    for p in sim.pop 
+       
+        de = false
+        for i in p.friends 
+            if i.state == depressed
+                de = true
+            end
+        end
+
+        if de
+            popcounter_friends+= 1
+            if p.state == depressed 
+                deprcounter_friends +=1
+            end
+        end
+        
+    end
+    return deprcounter_friends/popcounter_friends
+end
+function ratedep_ac()
+    popcounter_ac = 0
+    deprcounter_ac = 0
+    for p in sim.pop 
+
+        de = false
+        for i in p.ac 
+            if i.state == depressed
+                de = true
+            end
+        end
+
+        if de
+            popcounter_ac+= 1
+            if p.state == depressed 
+                deprcounter_ac +=1
+            end
+        end
+       
+    end
+    return deprcounter_ac/popcounter_ac
+end
+
+function ratedep_child()
+    popcounter_children = 0
+    deprcounter_children = 0
+    for p in sim.pop 
+       
+        de = false
+        for i in p.children
+            if i.state == depressed
+                de = true
+            end
+        end
+
+        if de
+            popcounter_children += 1
+            if p.state == depressed 
+                deprcounter_children +=1
+            end
+        end
+        
+    end
+    return deprcounter_children/popcounter_children
+end
+
+function ratedep_spouse()
+    popcounter_spouse = 0
+    deprcounter_spouse = 0
+    for p in sim.pop 
+
+        de = false
+        for i in p.spouse
+            if i.state == depressed
+                de = true
+            end
+        end
+
+        if de
+            popcounter_spouse += 1
+            if p.state == depressed 
+                deprcounter_spouse +=1
+            end
+        end
+        
+    end
+    return deprcounter_spouse/popcounter_spouse
+end
+
+function averagerisk()
+    avg = 0
+    for p in sim.pop
+        avg += p.risk
+    end
+
+    return avg/length(sim.pop)
+end
+
+#Variablen über komplette Population ausgeben
+@observe Data model begin
+    @record "N" Int length(model.pop)
+    @record "prev" ratedep() 
+    @record "prev parents" ratedep_parents()
+    @record "prev friends" ratedep_friends()
+    @record "prev ac" ratedep_ac()
+    @record "prev spouse" ratedep_spouse()
+    @record "prev children" ratedep_child()
+    @record "avg risk" averagerisk()
+
+end
+
+data = observe(Data, sim)
+print_header(stdout, Data)
+log_results(stdout, data)
+
