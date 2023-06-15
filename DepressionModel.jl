@@ -18,6 +18,7 @@ mutable struct SimplePerson
     friends :: Vector{SimplePerson}
     parents :: Vector{SimplePerson}
     children :: Vector{SimplePerson}
+    # warum ein Vector?
     spouse :: Vector{SimplePerson}
     ac :: Vector{SimplePerson}
 
@@ -106,7 +107,8 @@ function update!(person, sim, para)
     if length(person.spouse) > 0 && person.spouse[1].state == depressed 
         rate += para.rate_spouse
     end
-
+    
+    # ich wuerde wahrscheinlich eher prev einfach zu rate addieren
     if rate == 0
         rate += para.prev
     end
