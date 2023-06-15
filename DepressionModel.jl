@@ -6,6 +6,7 @@ using CSV
 using DataFrames
 using MiniObserve
 using Statistics
+using XLSX
 
 # all possible states a person can be in
 @enum State healthy depressed
@@ -41,16 +42,16 @@ Base.@kwdef mutable struct Parameters
     avail_high::Float64 = 0.5
     avail_middle::Float64 = 0.2
     avail_low::Float64 = 0.1
-    rate_parents::Float64 = 0.026
-    rate_friends::Float64 = 0.04
-    rate_ac::Float64 = 0.012
-    rate_child::Float64 = 0.05
-    rate_spouse::Float64 = 0.012
+    rate_parents::Float64 = 0.25
+    rate_friends::Float64 = 0.35
+    rate_ac::Float64 = 0
+    rate_child::Float64 = 0
+    rate_spouse::Float64 = 0
     n::Int64 = 1000
     n_fam::Int64 = 300
     p_ac::Float64 = 50/1000
     p_fr::Float64 = 10/1000
-    seed::Int64 = 12
+    seed::Int64 = 50
 
     #Breite der Verteilung der susceptibility
     b::Float64 = 0.1
@@ -78,35 +79,12 @@ mutable struct Simulation{AGENT}
 end
 
 function update!(person, sim, para)
-   #die Update-Funktion sieht ganz anders aus, weil ich einen Fehler bemerkt habe: bei der vorherigen Ansteckung wurde nie über .state der Status
-   #abgefragt, sondern ungefähr so: if person == depressed 
-   #daher gab es nie eine Ansteckung! Bei der Änderung habe ich gesehen, dass das Risiko massiv überschätzt wird (80% wurden depressiv)
-   #deshalb wird nun geschaut: gibt es in dieser Gruppe eine depressive Person? wenn über mehrere Gruppen, dann wird das Risiko gemittelt
-    parents = false
-    friends = false
-    children = false
-    ac = false
+ 
+    parents = findfirst(p-> p.state == depressed, person.parents) !== nothing
+    friends = findfirst(p-> p.state == depressed, person.friends) !== nothing
+    children = findfirst(p-> p.state == depressed, person.children) !== nothing
+    ac = findfirst(p-> p.state == depressed, person.ac) !== nothing
 
-    for p in person.parents 
-       if p.state == depressed 
-        parents = true
-       end
-    end
-    for p in person.children 
-        if p.state == depressed 
-            children = true
-        end    
-    end
-    for p in person.friends 
-        if p.state == depressed 
-            friends = true
-        end
-    end
-    for p in person.ac 
-        if p.state == depressed 
-            ac = true
-        end
-    end
 
     rate = 0
     if parents
@@ -130,7 +108,7 @@ function update!(person, sim, para)
     end
 
     if rate == 0
-        rate = para.prev
+        rate += para.prev
     end
 
     person.risk = ratetoprob(rate * person.susceptibility)
@@ -203,7 +181,7 @@ function setup_mixed(para)
 
     d_sum = cumsum(age_data_m)
     for i in eachindex(men)
-        r = rand(1:d_sum[end])
+        r = rand() * d_sum[end]
         idx = searchsortedfirst(d_sum, r)
 
         men[i].age = data_grownups.age[idx]
@@ -211,7 +189,7 @@ function setup_mixed(para)
 
     d_sum = cumsum(age_data_f)
     for i in eachindex(women)
-        r = rand(1:d_sum[end])
+        r = rand() * d_sum[end]
         idx = searchsortedfirst(d_sum, r)
 
         women[i].age = data_grownups.age[idx]
@@ -222,7 +200,7 @@ function setup_mixed(para)
 
     d_sum = cumsum(age_data_kids)
     for i in eachindex(kids)
-        r = rand(1:d_sum[end])
+        r = rand() * d_sum[end]
         idx = searchsortedfirst(d_sum, r)
 
         kids[i].age = data_kids.age[idx]
@@ -313,8 +291,7 @@ function setup_mixed(para)
     return pop
 end
 
-function  setup_sim()
-    para = Parameters()
+function  setup_sim(para)
     # for reproducibility
     Random.seed!(para.seed)
 
@@ -325,7 +302,7 @@ function  setup_sim()
 
     # create a simulation object with parameter values
     sim = Simulation(pop, 0)
-    sim, para
+    sim
 end
 
 function run_sim(sim, n_steps, para, verbose = false)
@@ -374,15 +351,6 @@ end
 
 
 
-# angenommen, dass Möglichkeit zur Therapie von SÖS abhängt
-sim, para = setup_sim()
-
-depr, heal, deprhigh, healhigh, deprmiddle, healmiddle, deprlow, heallow = run_sim(sim, 50, para)
-
-
-Plots.plot([heal, depr, healhigh, deprhigh, healmiddle, deprmiddle, heallow, deprlow], labels = ["healthy" "depressed" "healthy high ses" "depressed high ses" "healthy middle ses" "depressed middle ses" "healthy low ses" "depressed low ses"])
-
-
 
 
 
@@ -392,19 +360,12 @@ Plots.plot([heal, depr, healhigh, deprhigh, healmiddle, deprmiddle, heallow, dep
 
 
 #Ratenberechnung zur Überprüfung
-function ratedep()
-    counter = 0
-
-    for p in sim.pop
-        if p.state == depressed
-            counter += 1
-        end
-    end
-
+function ratedep(sim)
+    counter = count(p->p.state==depressed, sim.pop)
     return counter/length(sim.pop)
 end
 
-function ratedep_parents()
+function ratedep_parents(sim)
     popcounter_parents = 0
     deprcounter_parents = 0
 
@@ -428,7 +389,7 @@ function ratedep_parents()
     return deprcounter_parents/popcounter_parents
 end
 
-function ratedep_friends()
+function ratedep_friends(sim)
     popcounter_friends = 0
     deprcounter_friends = 0
 
@@ -451,7 +412,7 @@ function ratedep_friends()
     end
     return deprcounter_friends/popcounter_friends
 end
-function ratedep_ac()
+function ratedep_ac(sim)
     popcounter_ac = 0
     deprcounter_ac = 0
     for p in sim.pop 
@@ -474,7 +435,7 @@ function ratedep_ac()
     return deprcounter_ac/popcounter_ac
 end
 
-function ratedep_child()
+function ratedep_child(sim)
     popcounter_children = 0
     deprcounter_children = 0
     for p in sim.pop 
@@ -497,7 +458,7 @@ function ratedep_child()
     return deprcounter_children/popcounter_children
 end
 
-function ratedep_spouse()
+function ratedep_spouse(sim)
     popcounter_spouse = 0
     deprcounter_spouse = 0
     for p in sim.pop 
@@ -520,7 +481,7 @@ function ratedep_spouse()
     return deprcounter_spouse/popcounter_spouse
 end
 
-function averagerisk()
+function averagerisk(sim)
     avg = 0
     for p in sim.pop
         avg += p.risk
@@ -530,19 +491,250 @@ function averagerisk()
 end
 
 #Variablen über komplette Population ausgeben
-@observe Data model begin
-    @record "N" Int length(model.pop)
-    @record "prev" ratedep() 
-    @record "prev parents" ratedep_parents()
-    @record "prev friends" ratedep_friends()
-    @record "prev ac" ratedep_ac()
-    @record "prev spouse" ratedep_spouse()
-    @record "prev children" ratedep_child()
-    @record "avg risk" averagerisk()
+#@observe Data model begin
+#    @record "N" Int length(model.pop)
+#    @record "prev" ratedep(sim) 
+#    @record "prev parents" ratedep_parents(sim)
+#    @record "prev friends" ratedep_friends(sim)
+#    @record "prev ac" ratedep_ac(sim)
+#    @record "prev spouse" ratedep_spouse(sim)
+#    @record "prev children" ratedep_child(sim)
+#    @record "avg risk" averagerisk(sim)
+
+#end
+
+#data = observe(Data, sim)
+#print_header(stdout, Data)
+#log_results(stdout, data)
+
+
+# Berechnung der Risk Ratios
+function toriskratio(sim)
+    risk_parents = 0
+    pop_parents = 0
+
+    risk_non_par = 0
+    pop_non_par= 0
+
+    risk_friends = 0
+    risk_non_friends = 0
+
+    pop_friends = 0
+    pop_non_friends=0
+
+    risk_ac = 0
+    risk_non_ac = 0
+
+    pop_ac = 0
+    pop_non_ac = 0
+
+    risk_spouse = 0
+    risk_non_spouse = 0
+
+    pop_spouse = 0
+    pop_non_spouse = 0
+
+    risk_children = 0
+    risk_non_children = 0
+    pop_children = 0
+    pop_non_children = 0
+
+    avg_parents = 0
+    avg_non_parents = 0
+    avg_friends = 0
+    avg_non_friends = 0
+    avg_ac = 0
+    avg_non_ac = 0
+    avg_spouse = 0
+    avg_non_spouse = 0
+    avg_children = 0
+    avg_non_children = 0
+
+    rr_par = 0
+    rr_fr = 0
+    rr_ac = 0
+    rr_sp = 0
+    rr_ch = 0
+
+    #risk ration for people with depressed parents
+    for person in sim.pop
+        f = false
+        for parent in person.parents
+            if parent.state == depressed
+                f = true
+            end
+        end
+        if f
+            risk_parents += person.risk
+            pop_parents += 1
+        else
+            risk_non_par += person.risk 
+            pop_non_par += 1
+        end
+    end
+    avg_parents = risk_parents/pop_parents
+    avg_non_parents = risk_non_par/pop_non_par
+    rr_par = avg_parents/avg_non_parents
+
+    #risk ration for people with depressed friends
+    for person in sim.pop
+        f = false
+        for friend in person.friends
+            if friend.state == depressed
+                f = true
+            end
+        end
+        if f
+            risk_friends += person.risk
+            pop_friends += 1
+        else
+            risk_non_friends += person.risk 
+            pop_non_friends += 1
+        end
+    end
+    avg_friends = risk_friends/pop_friends
+    avg_non_friends = risk_non_friends/pop_non_friends
+    rr_fr = avg_friends/avg_non_friends
+
+    #risk ration for people with depressed acs
+    for person in sim.pop
+        f = false
+        for ac in person.ac
+            if ac.state == depressed
+                f = true
+            end
+        end
+        if f
+            risk_ac += person.risk
+            pop_ac += 1
+        else
+            risk_non_ac += person.risk 
+            pop_non_ac += 1
+        end
+    end
+    avg_ac = risk_ac/pop_ac
+    avg_non_ac = risk_non_ac/pop_non_ac
+    rr_ac = avg_ac/para.prev
+
+    #risk ration for people with depressed spouse
+    for person in sim.pop
+        f = false
+        if length(person.spouse) > 0 && person.spouse[1].state == depressed
+            f = true
+        end
+        if f
+            risk_spouse += person.risk
+            pop_spouse += 1
+        else
+            risk_non_spouse += person.risk 
+            pop_non_spouse += 1
+        end
+    end
+    avg_spouse = risk_spouse/pop_spouse
+    avg_non_spouse = risk_non_spouse/pop_non_spouse
+    rr_sp = avg_spouse/avg_non_spouse
+
+    #risk ration for people with depressed children
+    for person in sim.pop
+        f = false
+        for child in person.children
+            if child.state == depressed
+                f = true
+            end
+        end
+        if f
+            risk_children += person.risk
+            pop_children += 1
+        else
+            risk_non_children += person.risk 
+            pop_non_children += 1
+        end
+    end
+    avg_children = risk_children/pop_children
+    avg_non_children = risk_non_children/pop_non_children
+    rr_ch = avg_children/avg_non_children
+
+    return rr_par, rr_fr, rr_ac, rr_sp, rr_ch
+end
+
+
+
+
+function evaluationrr(sim, data_rr_par, data_rr_fr, data_rr_ac, data_rr_sp, data_rr_ch)
+    #Evaluation der Risk Ratios
+    rr_par, rr_fr, rr_ac, rr_sp, rr_ch = toriskratio(sim) 
+
+    #meansquaredistance
+    return ((data_rr_par - rr_par)^2 + (data_rr_fr - rr_fr)^2 + (data_rr_sp - rr_sp)^2 + (data_rr_ch- rr_ch)^2)/4
+end
+
+function evaluationrates(sim, data_prev, data_rate_parents, data_rate_friends, data_rate_ac, data_rate_children, data_rate_spouse)
+    #Evaluation der Raten
+    return ((data_prev - ratedep(sim))^2 + (data_rate_parents-ratedep_parents(sim))^2 + (data_rate_friends - ratedep_friends(sim))^2 + (data_rate_ac-ratedep_ac(sim))^2 + (data_rate_children - ratedep_child(sim))^2 + (data_rate_spouse - ratedep_spouse(sim))^2)/6
 
 end
 
-data = observe(Data, sim)
-print_header(stdout, Data)
-log_results(stdout, data)
+
+
+
+function goodnessoffit_rr(data_rr_par, data_rr_fr, data_rr_ac, data_rr_sp, data_rr_ch)
+    meanfit = 0.0
+
+    for i=1:5
+        para = Parameters(seed=rand(1:100))
+        sim = setup_sim(para)
+        run_sim(sim, 50, para)
+
+        meanfit = meanfit + evaluationrr(sim, data_rr_par, data_rr_fr, data_rr_ac, data_rr_sp, data_rr_ch)
+    end
+
+    return meanfit/5
+end
+
+function goodnessoffit_rates(data_prev, data_rate_par, data_rate_fr, data_rate_ac, data_rate_sp, data_rate_ch)
+    meanfit = 0.0
+
+    for i=1:5
+        para = Parameters(seed=rand(1:100))
+        sim = setup_sim(para)
+        run_sim(sim, 50, para)
+
+        meanfit = meanfit + evaluationrates(sim, data_prev, data_rate_par, data_rate_fr, data_rate_ac, data_rate_sp, data_rate_ch)
+    end
+
+    return meanfit/5
+end
+
+function printpara!(sim)
+    rr_par, rr_fr, rr_ac, rr_sp, rr_ch = toriskratio(sim)
+    print( "\n prev ", ratedep(sim) )
+    print( "\n prev parents ", ratedep_parents(sim) )
+    print( "\n prev friends ", ratedep_friends(sim) )
+    print( "\n prev ac ", ratedep_ac(sim) )
+    print( "\n prev spouse ", ratedep_spouse(sim) )
+    print( "\n prev children ", ratedep_child(sim) )
+    print( "\n avg risk ", averagerisk(sim) , "\n")
+
+    print( "\n rr parents ", rr_par)
+    print( "\n rr fr ", rr_fr)
+    #print( "\n rr ac ", rr_ac)
+    print( "\n rr sp ", rr_sp)
+    print( "\n rr ch ", rr_ch, "\n")
+end
+
+function standard!()
+    para = Parameters()
+    sim = setup_sim(para)
+    depr, heal, deprhigh, healhigh, deprmiddle, healmiddle, deprlow, heallow = run_sim(sim, 50, para)
+    printpara!(sim)
+    # angenommen, dass Möglichkeit zur Therapie von SÖS abhängt
+    #Plots.plot([heal, depr, healhigh, deprhigh, healmiddle, deprmiddle, heallow, deprlow], labels = ["healthy" "depressed" "healthy high ses" "depressed high ses" "healthy middle ses" "depressed middle ses" "healthy low ses" "depressed low ses"])
+end
+
+
+standard!()
+
+print("\n Risk Ratio Fit ", goodnessoffit_rr(2.5, 3, 1.5, 1.5, 1.5) )
+print("\n Rate Fit ", goodnessoffit_rates(0.08, 0.26, 0.35, 0.12, 0.12, 0.12))
+
 
