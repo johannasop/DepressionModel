@@ -50,8 +50,8 @@ Base.@kwdef mutable struct Parameters
     rate_spouse::Float64 = 0
     n::Int64 = 1000
     n_fam::Int64 = 300
-    p_ac::Float64 = 50/1000
-    p_fr::Float64 = 10/1000
+    p_ac::Float64 = 100/1000
+    p_fr::Float64 = 30/1000
     seed::Int64 = 50
 
     #Breite der Verteilung der susceptibility
@@ -616,7 +616,7 @@ function toriskratio(sim)
     end
     avg_ac = risk_ac/pop_ac
     avg_non_ac = risk_non_ac/pop_non_ac
-    rr_ac = avg_ac/para.prev
+    rr_ac = avg_ac/avg_non_ac
 
     #risk ration for people with depressed spouse
     for person in sim.pop
@@ -679,13 +679,13 @@ end
 
 
 
-function goodnessoffit_rr(data_rr_par, data_rr_fr, data_rr_ac, data_rr_sp, data_rr_ch)
+function eval_rr_multipleseeds(data_rr_par, data_rr_fr, data_rr_ac, data_rr_sp, data_rr_ch, new_paras)
     meanfit = 0.0
 
     for i=1:5
-        para = Parameters(seed=rand(1:100))
-        sim = setup_sim(para)
-        run_sim(sim, 50, para)
+        new_paras.seed = rand(1:100)
+        sim = setup_sim(new_paras)
+        run_sim(sim, 50, new_paras)
 
         meanfit = meanfit + evaluationrr(sim, data_rr_par, data_rr_fr, data_rr_ac, data_rr_sp, data_rr_ch)
     end
@@ -693,18 +693,126 @@ function goodnessoffit_rr(data_rr_par, data_rr_fr, data_rr_ac, data_rr_sp, data_
     return meanfit/5
 end
 
-function goodnessoffit_rates(data_prev, data_rate_par, data_rate_fr, data_rate_ac, data_rate_sp, data_rate_ch)
+function eval_rates_multipleseeds(data_prev, data_rate_par, data_rate_fr, data_rate_ac, data_rate_sp, data_rate_ch, new_paras)
     meanfit = 0.0
 
     for i=1:5
-        para = Parameters(seed=rand(1:100))
-        sim = setup_sim(para)
-        run_sim(sim, 50, para)
+        new_paras.seed = rand(1:100)
+        sim = setup_sim(new_paras)
+        run_sim(sim, 50, new_paras)
 
         meanfit = meanfit + evaluationrates(sim, data_prev, data_rate_par, data_rate_fr, data_rate_ac, data_rate_sp, data_rate_ch)
     end
 
     return meanfit/5
+end
+
+
+#systematische Variation von Parameterwerten
+function sensi!()
+
+    seeds = [12, 30, 42, 50, 74]
+    parameters_par = [0.01, 0.05, 0.1, 0.5, 0.9]
+    parameters_fr = [0.01, 0.05, 0.1, 0.5, 0.9]
+    nodenames = ["seed=12", " ", " ", " ", " ", " ",  "seed=30"," ", " ", " ", " ", " ", "seed=42", " ", " ", " ", " ", " ", "seed=50", " ", " ", " ", " ", " ", "seed=74", " ", " ", " ", " ", " "]
+
+    df= DataFrame([name => [] for name in nodenames], makeunique = true)
+    placeholder = []
+    cl = 1
+    cn = 1
+
+    for f in parameters_fr
+        for p in parameters_par
+            for s in seeds
+                    para = Parameters(rate_friends = f, rate_parents = p, seed = s)
+                    sim = setup_sim(para)
+                    depr, heal, deprhigh, healhigh, deprmiddle, healmiddle, deprlow, heallow = run_sim(sim, 50, para)
+                    push!(placeholder, ratedep(sim), ratedep_parents(sim), ratedep_friends(sim), ratedep_ac(sim), ratedep_child(sim), ratedep_spouse(sim))
+            end
+            push!(df, placeholder)
+            placeholder = []
+        end
+    end
+    CSV.write("Sensibilitätsanalyse.csv", df)
+
+end
+
+
+
+
+#einfache Approximation an optimale Werte
+
+mutable struct Paraqualityrr  
+
+    parameters::Parameters
+    quality::Float64
+
+end
+mutable struct Paraqualityrates
+
+    parameters::Parameters
+    quality::Float64
+
+end
+
+function randpara()
+
+    return Parameters(prev = rand(), rate_parents= rand(), rate_friends=rand(), p_ac = rand(1:1000)/1000)
+
+end
+
+function approximation!(steps) 
+
+    pq_rates = []
+    pq_rr = []
+
+    for i=1:6
+        new_paras = randpara()
+
+        qual_rr_new_paras = eval_rr_multipleseeds(2.5, 3.5, 1.2, 1.2, 1.2, new_paras)
+        qual_rates_new_paras = eval_rates_multipleseeds(0.08, 0.26, 0.32, 0.12, 0.12, 0.12, new_paras)
+
+        push!(pq_rates, Paraqualityrr(new_paras, qual_rr_new_paras)) 
+        push!(pq_rr, Paraqualityrates(new_paras, qual_rates_new_paras))
+    end
+
+    for i=1:steps
+        sort!(pq_rr, by=p->p.quality, rev=true)
+        sort!(pq_rates, by=p->p.quality, rev=true)
+
+        for i=1:3
+            pop!(pq_rr)
+            pop!(pq_rates)
+
+            new_paras = randpara()
+
+            qual_rr_new_paras = eval_rr_multipleseeds(2.5, 3.5, 1.2, 1.2, 1.2, new_paras)
+            qual_rates_new_paras = eval_rates_multipleseeds(0.08, 0.26, 0.32, 0.12, 0.12, 0.12, new_paras)
+
+            push!(pq_rates, Paraqualityrr(new_paras, qual_rr_new_paras)) 
+            push!(pq_rr, Paraqualityrates(new_paras, qual_rates_new_paras))
+        end
+
+    end 
+
+    sort!(pq_rr, by=p->p.quality,rev=true)
+    sort!(pq_rates, by=p->p.quality, rev=true)
+
+    present_optimalsolution(pq_rr, pq_rates)
+
+end
+
+function present_optimalsolution(pq_rr, pq_rates)
+    sim = setup_sim(last(pq_rr).parameters)
+    run_sim(sim, 50, last(pq_rr).parameters)
+
+    sim2= setup_sim(last(pq_rates).parameters)
+    run_sim(sim2, 50, last(pq_rates).parameters)
+
+    print("die optimalen Parameter (RR) sind Folgende: ", last(pq_rr).parameters, "\n")
+    printpara!(sim)
+    print("die optimalen Parameter (rates) sind Folgende: ", last(pq_rates).parameters, "\n")
+    printpara!(sim2)
 end
 
 function printpara!(sim)
@@ -734,9 +842,7 @@ function standard!()
 end
 
 
-standard!()
 
-print("\n Risk Ratio Fit ", goodnessoffit_rr(2.5, 3, 1.5, 1.5, 1.5) )
-print("\n Rate Fit ", goodnessoffit_rates(0.08, 0.26, 0.35, 0.12, 0.12, 0.12))
-
-
+#approximation!(10)
+#standard!()
+#sensi!()
