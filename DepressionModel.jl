@@ -169,7 +169,7 @@ end
 # p_contact is the probability that two agents are connected
 function setup_mixed(para)
     
-    pop = []
+    pop = Vector{SimplePerson}(undef, 0)
     men = [ SimplePerson() for i=1:(para.n/2-para.n/10)]
     women = [ SimplePerson() for i=1:(para.n/2-para.n/10)]
     kids = [ SimplePerson() for i=1:(para.n/5)]
@@ -667,12 +667,12 @@ function evaluationrr(sim, data_rr_par, data_rr_fr, data_rr_ac, data_rr_sp, data
     rr_par, rr_fr, rr_ac, rr_sp, rr_ch = toriskratio(sim) 
 
     #meansquaredistance
-    return ((data_rr_par - rr_par)^2 + (data_rr_fr - rr_fr)^2 + (data_rr_sp - rr_sp)^2 + (data_rr_ch- rr_ch)^2)/4
+    return ((data_rr_par - rr_par)^2 + (data_rr_fr - rr_fr)^2 ) /2
 end
 
 function evaluationrates(sim, data_prev, data_rate_parents, data_rate_friends, data_rate_ac, data_rate_children, data_rate_spouse)
     #Evaluation der Raten
-    return ((data_prev - ratedep(sim))^2 + (data_rate_parents-ratedep_parents(sim))^2 + (data_rate_friends - ratedep_friends(sim))^2 + (data_rate_ac-ratedep_ac(sim))^2 + (data_rate_children - ratedep_child(sim))^2 + (data_rate_spouse - ratedep_spouse(sim))^2)/6
+    return ((data_prev - ratedep(sim))^2 + (data_rate_parents-ratedep_parents(sim))^2 + (data_rate_friends - ratedep_friends(sim))^2 + (data_rate_ac-ratedep_ac(sim))^2 + (data_rate_spouse - ratedep_spouse(sim))^2 )/5
 
 end
 
@@ -717,7 +717,7 @@ function sensi!()
     nodenames = ["seed=12", " ", " ", " ", " ", " ",  "seed=30"," ", " ", " ", " ", " ", "seed=42", " ", " ", " ", " ", " ", "seed=50", " ", " ", " ", " ", " ", "seed=74", " ", " ", " ", " ", " "]
 
     df= DataFrame([name => [] for name in nodenames], makeunique = true)
-    placeholder = []
+    placeholder = Vector{Float64}(undef, 0)
     cl = 1
     cn = 1
 
@@ -730,7 +730,7 @@ function sensi!()
                     push!(placeholder, ratedep(sim), ratedep_parents(sim), ratedep_friends(sim), ratedep_ac(sim), ratedep_child(sim), ratedep_spouse(sim))
             end
             push!(df, placeholder)
-            placeholder = []
+            placeholder = Vector{Float64}(undef, 0)
         end
     end
     CSV.write("Sensibilitätsanalyse.csv", df)
@@ -757,61 +757,78 @@ end
 
 function randpara()
 
-    return Parameters(prev = rand(), rate_parents= rand(), rate_friends=rand(), p_ac = rand(1:1000)/1000)
+    return Parameters(prev = rand(), rate_parents= rand(), rate_friends=rand(), rate_ac = 0, rate_child = rand(), rate_spouse = 0, h= rand(), b=0.1, p_ac = rand(1:1000)/1000)
 
 end
 
-function approximation!(steps) 
+function approximation(steps, npoints=600) 
 
-    pq_rates = []
-    pq_rr = []
+    pq_rates = Paraqualityrates[]
+    pq_rr = Paraqualityrr[]
+    quality_array = Float64[]
 
-    for i=1:6
+
+    for i=1:npoints
+	    print(".")
         new_paras = randpara()
 
-        qual_rr_new_paras = eval_rr_multipleseeds(2.5, 3.5, 1.2, 1.2, 1.2, new_paras)
-        qual_rates_new_paras = eval_rates_multipleseeds(0.08, 0.26, 0.32, 0.12, 0.12, 0.12, new_paras)
+        qual_rr_new_paras = eval_rr_multipleseeds(2.5, 3.5, 1.2, 1.2, 1.5, new_paras)
+        qual_rates_new_paras = eval_rates_multipleseeds(0.08, 0.26, 0.32, 0.12, 0.12, 0.26, new_paras)
 
-        push!(pq_rates, Paraqualityrr(new_paras, qual_rr_new_paras)) 
-        push!(pq_rr, Paraqualityrates(new_paras, qual_rates_new_paras))
+        push!(pq_rr, Paraqualityrr(new_paras, qual_rr_new_paras)) 
+        push!(pq_rates, Paraqualityrates(new_paras, qual_rates_new_paras))
     end
+    
+    println()
 
     for i=1:steps
-        sort!(pq_rr, by=p->p.quality, rev=true)
-        sort!(pq_rates, by=p->p.quality, rev=true)
+        sort!(pq_rr, by=p->p.quality)
+        sort!(pq_rates, by=p->p.quality)
 
-        for i=1:3
+        push!(quality_array, pq_rr[1].quality)
+        println(pq_rates[1].quality)
+        println(pq_rates[2].quality)
+        println(pq_rates[3].quality)
+        
+        # das zuerst, sonst werden die neuen Punkte direkt wieder entfernt
+        for i=1:(npoints ÷ 2)
             pop!(pq_rr)
             pop!(pq_rates)
+        end
 
+        for i=1:(npoints ÷ 2)
             new_paras = randpara()
 
             qual_rr_new_paras = eval_rr_multipleseeds(2.5, 3.5, 1.2, 1.2, 1.2, new_paras)
-            qual_rates_new_paras = eval_rates_multipleseeds(0.08, 0.26, 0.32, 0.12, 0.12, 0.12, new_paras)
+            qual_rates_new_paras = eval_rates_multipleseeds(0.08, 0.26, 0.32, 0.12, 0.12, 0.26, new_paras)
 
-            push!(pq_rates, Paraqualityrr(new_paras, qual_rr_new_paras)) 
-            push!(pq_rr, Paraqualityrates(new_paras, qual_rates_new_paras))
+            push!(pq_rr, Paraqualityrr(new_paras, qual_rr_new_paras)) 
+            push!(pq_rates, Paraqualityrates(new_paras, qual_rates_new_paras))
         end
+        println("step $i")
 
     end 
 
-    sort!(pq_rr, by=p->p.quality,rev=true)
-    sort!(pq_rates, by=p->p.quality, rev=true)
+    sort!(pq_rr, by=p->p.quality)
+    sort!(pq_rates, by=p->p.quality)
 
     present_optimalsolution(pq_rr, pq_rates)
 
+    return quality_array
+
 end
 
+
 function present_optimalsolution(pq_rr, pq_rates)
-    sim = setup_sim(last(pq_rr).parameters)
-    run_sim(sim, 50, last(pq_rr).parameters)
+    sim = setup_sim(pq_rr[1].parameters)
+    run_sim(sim, 50, pq_rr[1].parameters)
 
-    sim2= setup_sim(last(pq_rates).parameters)
-    run_sim(sim2, 50, last(pq_rates).parameters)
+    sim2= setup_sim(pq_rates[1].parameters)
+    run_sim(sim2, 50, pq_rates[1].parameters)
 
-    print("die optimalen Parameter (RR) sind Folgende: ", last(pq_rr).parameters, "\n")
+    print("die optimalen Parameter (RR) sind Folgende: ", pq_rr[1].parameters, "\n")
     printpara!(sim)
-    print("die optimalen Parameter (rates) sind Folgende: ", last(pq_rates).parameters, "\n")
+    print("die optimalen Parameter (rates) sind Folgende: ", pq_rates[1].parameters, "\n")
     printpara!(sim2)
 end
 
@@ -843,6 +860,9 @@ end
 
 
 
-#approximation!(10)
+qual = approximation(10)
+Plots.plot([qual], labels=["Qualität der Approximation"])
+
 #standard!()
 #sensi!()
+
