@@ -50,8 +50,8 @@ Base.@kwdef mutable struct Parameters
     rate_spouse::Float64 = 0
     n::Int64 = 1000
     n_fam::Int64 = 300
-    p_ac::Float64 = 100/1000
-    p_fr::Float64 = 30/1000
+    p_ac::Float64 = 100
+    p_fr::Float64 = 30
     seed::Int64 = 50
 
     #Breite der Verteilung der susceptibility
@@ -164,10 +164,26 @@ function update_agents!(sim, para)
     end
 end   
 
+function pre_setup()
+
+    #Erwachsenen und Kindern ein Alter zuordnen
+    data_grownups = CSV.read(joinpath(@__DIR__, "pop_pyramid_2020_Erwachsene.csv"), DataFrame)
+    age_data_m = data_grownups.males
+    age_data_f = data_grownups.females
+
+    data_kids = CSV.read(joinpath(@__DIR__,"pop_pyramid_2020_Kinder.csv"), DataFrame)
+    age_data_kids = data_kids.males
+
+    d_sum_m = cumsum(age_data_m)
+    d_sum_f = cumsum(age_data_f)
+    d_sum_kids = cumsum(age_data_kids)
+
+    return d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids
+end
 
 # set up a mixed population
 # p_contact is the probability that two agents are connected
-function setup_mixed(para)
+function setup_mixed(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
     
     pop = Vector{SimplePerson}(undef, 0)
     men = [ SimplePerson() for i=1:(para.n/2-para.n/10)]
@@ -175,35 +191,23 @@ function setup_mixed(para)
     kids = [ SimplePerson() for i=1:(para.n/5)]
 
 
-    #Erwachsenen und Kindern ein Alter zuordnen
-    data_grownups = CSV.read(joinpath(@__DIR__, "pop_pyramid_2020_Erwachsene.csv"), DataFrame)
-    age_data_m = data_grownups.males
-    age_data_f = data_grownups.females
-    
-
-    d_sum = cumsum(age_data_m)
     for i in eachindex(men)
-        r = rand() * d_sum[end]
-        idx = searchsortedfirst(d_sum, r)
+        r = rand() * d_sum_m[end]
+        idx = searchsortedfirst(d_sum_m, r)
 
         men[i].age = data_grownups.age[idx]
     end
 
-    d_sum = cumsum(age_data_f)
     for i in eachindex(women)
-        r = rand() * d_sum[end]
-        idx = searchsortedfirst(d_sum, r)
+        r = rand() * d_sum_f[end]
+        idx = searchsortedfirst(d_sum_f, r)
 
         women[i].age = data_grownups.age[idx]
     end
 
-    data_kids = CSV.read(joinpath(@__DIR__,"pop_pyramid_2020_Kinder.csv"), DataFrame)
-    age_data_kids = data_kids.males
-
-    d_sum = cumsum(age_data_kids)
     for i in eachindex(kids)
-        r = rand() * d_sum[end]
-        idx = searchsortedfirst(d_sum, r)
+        r = rand() * d_sum_kids[end]
+        idx = searchsortedfirst(d_sum_kids, r)
 
         kids[i].age = data_kids.age[idx]
     end
@@ -276,31 +280,45 @@ function setup_mixed(para)
     # go through all combinations of agents and 
     # check if they are connected
     
+    #vorheriges Vorgehen
+    # for i in eachindex(pop)
+    #     for j in i+1:length(pop)
+    #         if rand() < para.p_ac && !(pop[i] in pop[j].spouse) && !(pop[i] in pop[j].children) && !(pop[i] in pop[j].parents)
+    #             push!(pop[i].ac, pop[j])
+    #             push!(pop[j].ac, pop[i])
+    #         elseif rand() < para.p_fr && !(pop[i] in pop[j].spouse) && !(pop[i] in pop[j].children) && !(pop[i] in pop[j].parents)
+    #             push!(pop[i].friends, pop[j])
+    #             push!(pop[j].friends, pop[i])
+    #         end
+    #     end
+    # end
+
     for i in eachindex(pop)
-        for j in i+1:length(pop)
-            if rand() < para.p_ac && !(pop[i] in pop[j].spouse) && !(pop[i] in pop[j].children) && !(pop[i] in pop[j].parents)
-                push!(pop[i].ac, pop[j])
-                push!(pop[j].ac, pop[i])
-            elseif rand() < para.p_fr && !(pop[i] in pop[j].spouse) && !(pop[i] in pop[j].children) && !(pop[i] in pop[j].parents)
-                push!(pop[i].friends, pop[j])
-                push!(pop[j].friends, pop[i])
-            end
-           
+        number_ac = rand(Poisson(para.p_ac))
+        number_fr = rand(Poisson(para.p_fr))
+        while length(pop[i].ac) < number_ac
+            pos_ac = pop[rand(1:1000)]
+            push!(pop[i].ac, pos_ac)
+            push!(pos_ac.ac, pop[i])
+        end
+        while length(pop[i].friends) < number_fr
+            pos_fr = pop[rand(1:1000)]
+            push!(pop[i].friends, pos_fr)
+            push!(pos_fr.friends, pop[i])
         end
     end
-      
-    
+
     return pop
 end
 
-function  setup_sim(para)
+function  setup_sim(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
     # for reproducibility
     Random.seed!(para.seed)
 
     
 
     # create a population of agents, fully mixed
-    pop = setup_mixed(para)
+    pop = setup_mixed(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
 
     # create a simulation object with parameter values
     sim = Simulation(pop, 0)
@@ -309,32 +327,32 @@ end
 
 function run_sim(sim, n_steps, para, verbose = false)
     # we keep track of the numbers
-    n_depressed = Int[]
-    n_healthy = Int[]
+    n_depressed = Float64[]
+    n_healthy = Float64[]
 
-    n_depressed_high = Int[]
-    n_healthy_high = Int[]
+    n_depressed_high = Float64[]
+    n_healthy_high = Float64[]
 
-    n_depressed_middle = Int[]
-    n_healthy_middle = Int[]
+    n_depressed_middle = Float64[]
+    n_healthy_middle = Float64[]
 
-    n_depressed_low = Int[]
-    n_healthy_low = Int[]
+    n_depressed_low = Float64[]
+    n_healthy_low = Float64[]
 
     # simulation steps
     for t in  1:n_steps
         update_agents!(sim, para)
-        push!(n_depressed, count(p -> p.state == depressed, sim.pop))
-        push!(n_healthy, count(p -> p.state == healthy, sim.pop))
+        push!(n_depressed, count(p -> p.state == depressed, sim.pop)/length(sim.pop))
+        push!(n_healthy, count(p -> p.state == healthy, sim.pop)/length(sim.pop))
 
-        push!(n_depressed_high, count(p -> p.state == depressed && p.ses == high, sim.pop))
-        push!(n_healthy_high, count(p -> p.state == healthy && p.ses == high, sim.pop))
+        push!(n_depressed_high, count(p -> p.state == depressed && p.ses == high, sim.pop)/length(sim.pop))
+        push!(n_healthy_high, count(p -> p.state == healthy && p.ses == high, sim.pop)/length(sim.pop))
 
-        push!(n_depressed_middle, count(p -> p.state == depressed && p.ses == middle, sim.pop))
-        push!(n_healthy_middle, count(p -> p.state == healthy && p.ses == middle, sim.pop))
+        push!(n_depressed_middle, count(p -> p.state == depressed && p.ses == middle, sim.pop)/length(sim.pop))
+        push!(n_healthy_middle, count(p -> p.state == healthy && p.ses == middle, sim.pop)/length(sim.pop))
 
-        push!(n_depressed_low, count(p -> p.state == depressed && p.ses == low, sim.pop))
-        push!(n_healthy_low, count(p -> p.state == healthy && p.ses == low, sim.pop))
+        push!(n_depressed_low, count(p -> p.state == depressed && p.ses == low, sim.pop)/length(sim.pop))
+        push!(n_healthy_low, count(p -> p.state == healthy && p.ses == low, sim.pop)/length(sim.pop))
         # a bit of output
         if verbose
             println(t, ", ", n_depressed[end], ", ", n_healthy[end])
@@ -347,7 +365,7 @@ function run_sim(sim, n_steps, para, verbose = false)
     
     # return the results (normalized by pop size)
     n = length(sim.pop)
-    n_depressed./n, n_healthy./n , n_depressed_high./n, n_healthy_high./n, n_depressed_middle./n, n_healthy_middle./n,  n_depressed_low./n, n_healthy_low./n
+    n_depressed, n_healthy , n_depressed_high, n_healthy_high, n_depressed_middle, n_healthy_middle,  n_depressed_low, n_healthy_low
 end
 
 
@@ -679,12 +697,12 @@ end
 
 
 
-function eval_rr_multipleseeds(data_rr_par, data_rr_fr, data_rr_ac, data_rr_sp, data_rr_ch, new_paras)
+function eval_rr_multipleseeds(data_rr_par, data_rr_fr, data_rr_ac, data_rr_sp, data_rr_ch, new_paras, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
     meanfit = 0.0
 
     for i=1:5
         new_paras.seed = rand(1:100)
-        sim = setup_sim(new_paras)
+        sim = setup_sim(new_paras, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
         run_sim(sim, 50, new_paras)
 
         meanfit = meanfit + evaluationrr(sim, data_rr_par, data_rr_fr, data_rr_ac, data_rr_sp, data_rr_ch)
@@ -693,12 +711,12 @@ function eval_rr_multipleseeds(data_rr_par, data_rr_fr, data_rr_ac, data_rr_sp, 
     return meanfit/5
 end
 
-function eval_rates_multipleseeds(data_prev, data_rate_par, data_rate_fr, data_rate_ac, data_rate_sp, data_rate_ch, new_paras)
+function eval_rates_multipleseeds(data_prev, data_rate_par, data_rate_fr, data_rate_ac, data_rate_sp, data_rate_ch, new_paras, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
     meanfit = 0.0
 
     for i=1:5
         new_paras.seed = rand(1:100)
-        sim = setup_sim(new_paras)
+        sim = setup_sim(new_paras, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
         run_sim(sim, 50, new_paras)
 
         meanfit = meanfit + evaluationrates(sim, data_prev, data_rate_par, data_rate_fr, data_rate_ac, data_rate_sp, data_rate_ch)
@@ -711,6 +729,7 @@ end
 #systematische Variation von Parameterwerten
 function sensi!()
 
+    d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids = pre_setup()
     seeds = [12, 30, 42, 50, 74]
     parameters_par = [0.01, 0.05, 0.1, 0.5, 0.9]
     parameters_fr = [0.01, 0.05, 0.1, 0.5, 0.9]
@@ -725,7 +744,7 @@ function sensi!()
         for p in parameters_par
             for s in seeds
                     para = Parameters(rate_friends = f, rate_parents = p, seed = s)
-                    sim = setup_sim(para)
+                    sim = setup_sim(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
                     depr, heal, deprhigh, healhigh, deprmiddle, healmiddle, deprlow, heallow = run_sim(sim, 50, para)
                     push!(placeholder, ratedep(sim), ratedep_parents(sim), ratedep_friends(sim), ratedep_ac(sim), ratedep_child(sim), ratedep_spouse(sim))
             end
@@ -757,8 +776,15 @@ end
 
 function randpara()
 
-    return Parameters(prev = rand(), rate_parents= rand(), rate_friends=rand(), rate_ac = 0, rate_child = rand(), rate_spouse = 0, h= rand(), b=0.1, p_ac = rand(1:1000)/1000)
+    return Parameters(prev = rand(), rate_parents= rand(), rate_friends=rand(), rate_ac = rand(), rate_child = rand(), rate_spouse = rand(), h= rand(), b=0.1)
 
+end
+
+function paraplusnorm(paras)
+    
+    new_paras = Parameters(prev=paras.prev + rand(Normal(0,0.1)), rate_parents = paras.rate_parents + rand(Normal(0,0.1)), rate_friends = paras.rate_friends + rand(Normal(0,0.1)), rate_ac = paras.rate_ac + rand(Normal(0,0.1)), rate_child = paras.rate_child + rand(Normal(0,0.1)), rate_spouse = paras.rate_spouse + rand(Normal(0,0.1)), h = paras.h + rand(Normal(0,0.1)))
+
+    return new_paras
 end
 
 function approximation(steps, npoints=600) 
@@ -767,13 +793,14 @@ function approximation(steps, npoints=600)
     pq_rr = Paraqualityrr[]
     quality_array = Float64[]
 
+    d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids = pre_setup()
 
     for i=1:npoints
 	    print(".")
         new_paras = randpara()
 
-        qual_rr_new_paras = eval_rr_multipleseeds(2.5, 3.5, 1.2, 1.2, 1.5, new_paras)
-        qual_rates_new_paras = eval_rates_multipleseeds(0.08, 0.26, 0.32, 0.12, 0.12, 0.26, new_paras)
+        qual_rr_new_paras = eval_rr_multipleseeds(2.5, 3.5, 1.2, 1.2, 1.5, new_paras, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
+        qual_rates_new_paras = eval_rates_multipleseeds(0.08, 0.26, 0.32, 0.12, 0.12, 0.26, new_paras, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
 
         push!(pq_rr, Paraqualityrr(new_paras, qual_rr_new_paras)) 
         push!(pq_rates, Paraqualityrates(new_paras, qual_rates_new_paras))
@@ -797,13 +824,14 @@ function approximation(steps, npoints=600)
         end
 
         for i=1:(npoints ÷ 2)
-            new_paras = randpara()
+            new_paras_rates = paraplusnorm(pq_rates[round(Int64, rand(truncated(Normal(0,100); lower = 1)))].parameters)
+            new_paras_rr = paraplusnorm(pq_rr[rand(1:(npoints÷2))].parameters)
 
-            qual_rr_new_paras = eval_rr_multipleseeds(2.5, 3.5, 1.2, 1.2, 1.2, new_paras)
-            qual_rates_new_paras = eval_rates_multipleseeds(0.08, 0.26, 0.32, 0.12, 0.12, 0.26, new_paras)
+            qual_rr_new_paras = eval_rr_multipleseeds(2.5, 3.5, 1.2, 1.2, 1.2, new_paras_rr, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
+            qual_rates_new_paras = eval_rates_multipleseeds(0.08, 0.26, 0.32, 0.12, 0.12, 0.26, new_paras_rates, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
 
-            push!(pq_rr, Paraqualityrr(new_paras, qual_rr_new_paras)) 
-            push!(pq_rates, Paraqualityrates(new_paras, qual_rates_new_paras))
+            push!(pq_rr, Paraqualityrr(new_paras_rr, qual_rr_new_paras)) 
+            push!(pq_rates, Paraqualityrates(new_paras_rates, qual_rates_new_paras))
         end
         println("step $i")
 
@@ -820,10 +848,11 @@ end
 
 
 function present_optimalsolution(pq_rr, pq_rates)
-    sim = setup_sim(pq_rr[1].parameters)
+    d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids = pre_setup()
+    sim = setup_sim(pq_rr[1].parameters,d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
     run_sim(sim, 50, pq_rr[1].parameters)
 
-    sim2= setup_sim(pq_rates[1].parameters)
+    sim2= setup_sim(pq_rates[1].parameters, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
     run_sim(sim2, 50, pq_rates[1].parameters)
 
     print("die optimalen Parameter (RR) sind Folgende: ", pq_rr[1].parameters, "\n")
@@ -850,8 +879,9 @@ function printpara!(sim)
 end
 
 function standard!()
+    d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids = pre_setup()
     para = Parameters()
-    sim = setup_sim(para)
+    sim = setup_sim(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
     depr, heal, deprhigh, healhigh, deprmiddle, healmiddle, deprlow, heallow = run_sim(sim, 50, para)
     printpara!(sim)
     # angenommen, dass Möglichkeit zur Therapie von SÖS abhängt
@@ -860,7 +890,7 @@ end
 
 
 
-qual = approximation(10)
+qual = approximation(30)
 Plots.plot([qual], labels=["Qualität der Approximation"])
 
 #standard!()
