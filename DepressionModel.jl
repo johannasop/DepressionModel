@@ -7,9 +7,10 @@ using DataFrames
 using MiniObserve
 using Statistics
 
-
-include("/Users/johannabuck/Desktop/Praktikum/DepressionModel_julia/analytics.jl")
-include("/Users/johannabuck/Desktop/Praktikum/DepressionModel_julia/calibration.jl")
+include("parameters.jl") 
+include("analytics.jl")
+include("calibration.jl")
+include("feedback.jl")
 
 # all possible states a person can be in
 @enum State healthy depressed
@@ -36,40 +37,16 @@ mutable struct SimplePerson
     susceptibility::Float64
     risk::Float64
 
-end
 
-Base.@kwdef mutable struct Parameters
-
-    prev::Float64 = 0.1
-    rem::Float64 = 0.51
-    rem_ther::Float64 = 0.45
-    avail_high::Float64 = 0.5
-    avail_middle::Float64 = 0.2
-    avail_low::Float64 = 0.1
-    rate_parents::Float64 = 0.25
-    rate_friends::Float64 = 0.35
-    rate_ac::Float64 = 0
-    rate_child::Float64 = 0
-    rate_spouse::Float64 = 0
-    n::Int64 = 1000
-    n_fam::Int64 = 300
-    p_ac::Float64 = 50
-    p_fr::Float64 = 15
-    seed::Int64 = 50
-
-    #Breite der Verteilung der susceptibility
-    b::Float64 = 0.1
-
-    #Heritabilitätsindex(?)
-    h::Float64 = 0.3
-
-    #Resilienzfaktor?
-    res::Float64 = 1.0
+    #Eigenschaften für Feedbackeffekte
+    acachievement::Float64
 
 end
+
+
 # how we construct a person object
-SimplePerson() = SimplePerson([], [], [], [], [], 0, healthy, middle, 0, 0, 0)   # default Person is susceptible and has no contacts
-SimplePerson(state) = SimplePerson([], [], [], [], [], 0, state, middle, 0, 0, 0)  # default Person has no contacts
+SimplePerson() = SimplePerson([], [], [], [], [], 0, healthy, middle, 0, 0, 0, 0)   # default Person is susceptible and has no contacts
+SimplePerson(state) = SimplePerson([], [], [], [], [], 0, state, middle, 0, 0, 0, 0)  # default Person has no contacts
 
 
 # this is a parametric type
@@ -82,7 +59,7 @@ mutable struct Simulation{AGENT}
     time::Int64
 end
 
-function update!(person, sim, para)
+function update!(person, sim, para, fdbck)
  
     parents = findfirst(p-> p.state == depressed, person.parents) !== nothing
     friends = findfirst(p-> p.state == depressed, person.friends) !== nothing
@@ -100,7 +77,9 @@ function update!(person, sim, para)
     end
 
     if friends
-        rate += para.rate_friends
+        percentage = count(p -> p.state == depressed, person.friends)/length(person.friends)
+
+        rate += para.rate_friends * percentage
     end
 
     if ac 
@@ -111,7 +90,6 @@ function update!(person, sim, para)
         rate += para.rate_spouse
     end
     
-    # ich wuerde wahrscheinlich eher prev einfach zu rate addieren
     if rate == 0
         rate += para.prev
     end
@@ -124,6 +102,10 @@ function update!(person, sim, para)
     #Spontanremmisionen 
     if rand() < ratetoprob(para.rem) && person.state == depressed 
         person.state = healthy
+    end
+
+    if fdbck == 1
+        depression_achievement(person)
     end
 
     therapy!(person, para)
@@ -157,13 +139,13 @@ function ratetoprob(r)
     return r * exp(-r)
 end
 
-function update_agents!(sim, para)
+function update_agents!(sim, para, fdbck)
     # we need to change the order, otherwise agents at the beginning of the 
     # pop array will behave differently from those further in the back
     sim.pop = shuffle(sim.pop)
     
     for p in sim.pop
-        update!(p, sim, para)
+        update!(p, sim, para, fdbck)
     end
 end   
 
@@ -330,7 +312,7 @@ function  setup_sim(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids
     sim
 end
 
-function run_sim(sim, n_steps, para, verbose = false)
+function run_sim(sim, n_steps, para, fdbck, verbose = false)
     # we keep track of the numbers
     n_depressed = Float64[]
     n_healthy = Float64[]
@@ -346,7 +328,7 @@ function run_sim(sim, n_steps, para, verbose = false)
 
     # simulation steps
     for t in  1:n_steps
-        update_agents!(sim, para)
+        update_agents!(sim, para, fdbck)
         push!(n_depressed, count(p -> p.state == depressed, sim.pop)/length(sim.pop))
         push!(n_healthy, count(p -> p.state == healthy, sim.pop)/length(sim.pop))
 
@@ -379,14 +361,25 @@ function standard!()
     d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids = pre_setup()
     para = Parameters()
     sim = setup_sim(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
-    depr, heal, deprhigh, healhigh, deprmiddle, healmiddle, deprlow, heallow = run_sim(sim, 50, para)
+    depr, heal, deprhigh, healhigh, deprmiddle, healmiddle, deprlow, heallow = run_sim(sim, 50, para, 0)
     printpara!(sim)
     # angenommen, dass Möglichkeit zur Therapie von SÖS abhängt
     #Plots.plot([heal, depr, healhigh, deprhigh, healmiddle, deprmiddle, heallow, deprlow], labels = ["healthy" "depressed" "healthy high ses" "depressed high ses" "healthy middle ses" "depressed middle ses" "healthy low ses" "depressed low ses"])
 end
 
-qual = approximation(30)
-Plots.plot([qual], labels=["Qualität der Approximation"])
+function withfeedbckeff!()
+    d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids = pre_setup()
+    para = Parameters()
+    sim = setup_sim(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
+    feedbackeffect_academics(sim)
+    depr, heal, deprhigh, healhigh, deprmiddle, healmiddle, deprlow, heallow = run_sim(sim, 50, para, 1)
+    printpara!(sim)
+    achievementtoses(sim)
+end
+
+qual = approximation(60)
+Plots.plot([qual], labels=["Qualität der Approximation"]) 
 
 #standard!()
+#withfeedbckeff!()
 #sensi!()
