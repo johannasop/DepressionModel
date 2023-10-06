@@ -1,4 +1,5 @@
 
+
 function evaluationrr(sim, data_rr_par, data_rr_fr, data_rr_ac, data_rr_sp, data_rr_ch)
     #Evaluation der Risk Ratios
     rr_par, rr_fr, rr_ac, rr_sp, rr_ch = toriskratio(sim) 
@@ -22,7 +23,7 @@ function eval_rr_multipleseeds(data_rr_par, data_rr_fr, data_rr_ac, data_rr_sp, 
     for i=1:5
         new_paras.seed = rand(1:100)
         sim = setup_sim(new_paras, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
-        run_sim(sim, 50, new_paras)
+        run_sim(sim, 50, new_paras, 0)
 
         meanfit = meanfit + evaluationrr(sim, data_rr_par, data_rr_fr, data_rr_ac, data_rr_sp, data_rr_ch)
     end
@@ -36,7 +37,7 @@ function eval_rates_multipleseeds(data_prev, data_rate_par, data_rate_fr, data_r
     for i=1:5
         new_paras.seed = rand(1:100)
         sim = setup_sim(new_paras, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
-        run_sim(sim, 50, new_paras)
+        run_sim(sim, 50, new_paras, 0)
 
         meanfit = meanfit + evaluationrates(sim, data_prev, data_rate_par, data_rate_fr, data_rate_ac, data_rate_sp, data_rate_ch)
     end
@@ -64,7 +65,7 @@ function sensi!()
             for s in seeds
                     para = Parameters(rate_friends = f, rate_parents = p, seed = s)
                     sim = setup_sim(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
-                    depr, heal, deprhigh, healhigh, deprmiddle, healmiddle, deprlow, heallow = run_sim(sim, 50, para)
+                    depr, heal, deprhigh, healhigh, deprmiddle, healmiddle, deprlow, heallow = run_sim(sim, 50, para, 0)
                     push!(placeholder, ratedep(sim), ratedep_parents(sim), ratedep_friends(sim), ratedep_ac(sim), ratedep_child(sim), ratedep_spouse(sim))
             end
             push!(df, placeholder)
@@ -129,8 +130,6 @@ function approximation(steps, npoints=600)
         push!(pq_rates, Paraqualityrates(new_paras, qual_rates_new_paras))
     end
     
-    println()
-
     for i=1:steps
         sort!(pq_rr, by=p->p.quality)
         sort!(pq_rates, by=p->p.quality)
@@ -144,16 +143,17 @@ function approximation(steps, npoints=600)
         println(pq_rr[2].quality)
         println(pq_rr[3].quality)
 
-        
-        # das zuerst, sonst werden die neuen Punkte direkt wieder entfernt
+
         for i=1:(npoints ÷ 2)
             pop!(pq_rr)
             pop!(pq_rates)
         end
 
         for i=1:(npoints ÷ 2)
-            new_paras_rates = paraplusnorm(pq_rates[rand(1:(npoints÷6))].parameters)
-            new_paras_rr = paraplusnorm(pq_rr[rand(1:(npoints÷6))].parameters)
+            new_paras_rates = paraplusnorm(pq_rates[trunc(Int64, rand(truncated(Normal(0,100); lower = 1
+            )))].parameters)
+            new_paras_rr = paraplusnorm(pq_rr[trunc(Int64, rand(truncated(Normal(0,100); lower = 1
+            )))].parameters)
 
             qual_rr_new_paras = eval_rr_multipleseeds(2.5, 3.5, 1.2, 1.2, 1.2, new_paras_rr, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
             qual_rates_new_paras = eval_rates_multipleseeds(0.08, 0.26, 0.32, 0.12, 0.12, 0.26, new_paras_rates, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
@@ -176,17 +176,20 @@ end
 
 
 function present_optimalsolution(pq_rr, pq_rates)
-    d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids = pre_setup()
-    sim = setup_sim(pq_rr[1].parameters,d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
-    run_sim(sim, 50, pq_rr[1].parameters)
 
-    sim2= setup_sim(pq_rates[1].parameters, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
-    run_sim(sim2, 50, pq_rates[1].parameters)
+    for i=1:3
+        d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids = pre_setup()
+        sim = setup_sim(pq_rr[i].parameters,d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
+        run_sim(sim, 50, pq_rr[i].parameters, 0)
 
-    print("die optimalen Parameter (RR) sind Folgende: ", pq_rr[1].parameters, "\n")
-    printpara!(sim)
-    print("die optimalen Parameter (rates) sind Folgende: ", pq_rates[1].parameters, "\n")
-    printpara!(sim2)
+        sim2= setup_sim(pq_rates[1].parameters, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
+        run_sim(sim2, 50, pq_rates[1].parameters, 0)
+
+        println("die Parameter (RR) sind Folgende: ", pq_rr[i].parameters)
+        printpara!(sim)
+        println("die Parameter (rates) sind Folgende: ", pq_rates[i].parameters)
+        printpara!(sim2)
+    end
 end
 
 function printpara!(sim)

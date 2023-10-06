@@ -1,0 +1,61 @@
+
+function feedbackeffect_academics(pop)
+
+    for person in pop 
+        ses_school(person)
+        family_school(person)
+    end
+
+end
+
+function ses_school(person)
+    if person.ses == high
+        person.acachievement = rand(Normal(1.0, 0.1))
+    
+    elseif person.ses == middle 
+        person.acachievement = rand(Normal(0.5, 0.1))
+
+    elseif person.ses == low
+        person.acachievement = rand(Normal(0.0, 0.1))
+    end
+
+    if person.achievement > 1.0 
+        person.achievement = 1.0
+
+    elseif person.achievement < 0.0
+        person.achievement = 0.0
+    end
+end
+
+function family_school(person)
+    mean = 0
+    if length(person.parents) != 0 
+        for parent in person.parents
+            mean = mean + parent.acachievement
+        end
+    end
+    mean = mean/length(person.parents)
+    person.acachievement = 0.5*(mean) + 0.5*(person.acachievement)
+end
+
+function depression_achievement(person)
+    if person.state == depressed
+        person.acachievement = person.acachievement - rand(Normal(-0.1, 0.1))
+    end
+end
+
+function achievementtoses(person)
+    if person.acachievement <= 0.33 && person.ses != low 
+        person.ses = low
+        println("down ", person.state)
+    elseif person.acachievement <= 0.66 && person.ses == low
+        person.ses = middle
+        println("up ", person.state)
+    elseif person.acachievement <= 0.66 && person.ses == high
+        person.ses = middle 
+        println("down ", person.state)
+    elseif person.acachievement <= 1.0 && person.ses!= high 
+        person.ses = high
+        prinln("up ", person.state)
+    end
+end

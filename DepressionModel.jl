@@ -56,11 +56,16 @@ mutable struct Simulation{AGENT}
     
     pop :: Vector{AGENT}
 
+    pop_singles :: Vector{AGENT}
+    pop_potentialparents :: Vector{AGENT}
+
     time::Int64
 end
 
 function update!(person, sim, para, fdbck)
  
+    population_update!(person, sim, para)
+
     parents = findfirst(p-> p.state == depressed, person.parents) !== nothing
     friends = findfirst(p-> p.state == depressed, person.friends) !== nothing
     children = findfirst(p-> p.state == depressed, person.children) !== nothing
@@ -111,6 +116,85 @@ function update!(person, sim, para, fdbck)
     therapy!(person, para)
 end
 
+function population_update!(person, sim, para)
+
+    person.age += 1
+
+    #über 100-Jährige sterben lassen
+    if person.age > 100
+        newkid = SimplePerson()
+
+        #Eltern für neues Kind finden
+        i = rand(1:length(sim.pop_potentialparents))
+        parent = sim.pop_potentialparents[i]
+        index = findfirst(p -> p == parent, sim.pop)
+
+        #SES und susceptibility: gleicher SES wie Eltern aber bisschen andere susceptibility
+        newkid.ses = parent.ses
+        newkid.susceptibility =  (para.h * ((parent.susceptibility + parent.spouse[1].susceptibility)/2) + ((1-para.h) * rand(Normal(1,para.b))))
+
+
+        push!(newkid.parents, pop[index])
+        push!(newkid.parents, pop[index].spouse[1])
+        push!(pop[index].children, newkid)
+        push!(pop[index].spouse[1].children, newkid)
+
+        if rand() < para.p_kids[length(pop[index].children)]
+            sim.pop_potentialparents[i] = last(sim.pop_potentialparents)
+            pop!(sim.pop_potentialparents)            
+        end
+
+        #Mensch sterben lassen und durch neues Kind ersetzen
+        replace!(pop, person => newkid)
+        return 
+    end
+
+    if person.age > 18
+        push!(sim.pop_singles, person)
+    end
+
+    #ist die Person single? Dann bestimmte Wahrscheinlichkeit einen Partner zu finden
+    if length(person.spouse) == 0 && rand() < para.findingpartner
+        #solange noch kein Partner gefunden wurde, durchlaufen lassen
+        while length(person.spouse) == 0
+            #Wahrscheinlichkeit aus dem gleichen Umfeld zu kommen, wird dann nochmal hälftig auf Freundeskreis und hälftig auf Bekanntenkreis aufgeteilt
+            if rand()< para.partnersamecircle
+                if rand() < 0.5
+                    x = rand(1:length(person.friends))
+                    potpartner = person.friends[x]
+
+                else
+                    x = rand(1:length(person.ac))
+                    potpartner = person.ac[x]
+                end
+            else
+                x = rand(1:length(sim.pop_singles))
+                potpartner = sim.pop_singles[x]
+            end
+
+            #Bedingungen: Partner muss single sein, der Altersunterschied darf nicht zu groß sein und der SES muss gleich sein
+            if length(potpartner.spouse) == 0 && ((potpartner.age - person.age) < 5) && ((potpartner.age - person.age) > -5) && potpartner.ses == person.ses
+                push!(person.spouse, potpartner)
+                push!(potpartner.spouse, person)
+
+                x = findfirst(p -> p == person, sim.pop_singles)
+                sim.pop_singles[x] = last(sim.pop_singles)
+                pop!(sim.pop_singles)
+
+                x = findfirst(p -> p == potpartner, sim.pop_singles)
+                sim.pop_singles[x] = last(sim.pop_singles)
+                pop!(sim.pop_singles)
+
+                if rand() > para.p_none
+                    push!(sim.pop_potentialparents, person)
+                    push!(sim.pop_potentialparents, potpartner)
+                end
+            end
+
+        end
+    end
+
+end
 function therapy!(person, para)
 
     #Wahrscheinlichkeit sich in Therapie zu begeben in Abhängigkeit des SÖS
@@ -175,6 +259,9 @@ function setup_mixed(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kid
     women = [ SimplePerson() for i=1:(para.n/2-para.n/10)]
     kids = [ SimplePerson() for i=1:(para.n/5)]
 
+    pop_potentialparents = Vector{SimplePerson}(undef, 0)
+    pop_singles = Vector{SimplePerson}(undef, 0)
+
 
     for i in eachindex(men)
         r = rand() * d_sum_m[end]
@@ -214,7 +301,7 @@ function setup_mixed(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kid
         man = men[x]
         woman = women[y]
 
-        #gleicher SÖS aber andere susceptibility
+        #gleicher SÖS aber andere susceptibility, beide nicht mehr single
         woman.ses = man.ses
         woman.susceptibility = rand(Normal(1, para.b))
 
@@ -236,6 +323,7 @@ function setup_mixed(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kid
     #ordne Kinder diesen Partnern zu
     
     for i in eachindex(kids)
+        #hier könnte ich auch einfach Länge der Population nehmen? Bis jetzt befinden sich in dieser ja nur Paare
         x = rand(1:(para.n_fam*2))   
 
         #gleicher SÖS wie Eltern, susceptibility als Mittelwert der susceptibility der Eltern plus einem kleinen Wert aus Normalverteilung
@@ -252,13 +340,22 @@ function setup_mixed(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kid
         #jeweiliger Partner wird als Elternteil eingetragen und bei diesem das Kind gespeichert
         push!(pop[x].spouse[1].children, last(pop))
         push!(last(pop).parents, pop[x].spouse[1])
+        
     end
     
+    #finde Paare ohne Kinder und trage sie auf Liste der potentiellen Eltern ein
+    for person in pop
+        if length(person.children) == 0
+            push!(pop_potentialparents, person)
+        end
+    end
+
     #restlichen Frauen auch einen SÖS zuordnen und übrig Gebliebene einsortieren
     for i in eachindex(women)
         women[i].ses = ses[rand(1:3)]
         women[i].susceptibility = rand(Normal(1,para.b))
     end
+    append!(pop_singles, men, women)
     append!(pop, men, women)
     
 
@@ -295,7 +392,8 @@ function setup_mixed(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kid
         end
     end
 
-    return pop
+
+    return pop, pop_singles, pop_potentialparents
 end
 
 function  setup_sim(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
@@ -305,10 +403,10 @@ function  setup_sim(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids
     
 
     # create a population of agents, fully mixed
-    pop = setup_mixed(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
+    pop, pop_singles, pop_potentialparents = setup_mixed(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
 
     # create a simulation object with parameter values
-    sim = Simulation(pop, 0)
+    sim = Simulation(pop, pop_singles, pop_potentialparents, 0)
     sim
 end
 
@@ -377,9 +475,9 @@ function withfeedbckeff!()
     achievementtoses(sim)
 end
 
-qual = approximation(60)
-Plots.plot([qual], labels=["Qualität der Approximation"]) 
+#qual = approximation(60)
+#Plots.plot([qual], labels=["Qualität der Approximation"]) 
 
-#standard!()
+standard!()
 #withfeedbckeff!()
 #sensi!()

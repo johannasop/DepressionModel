@@ -1,3 +1,4 @@
+
 #Ratenberechnung zur Überprüfung
 function ratedep(sim)
     counter = count(p->p.state==depressed, sim.pop)
