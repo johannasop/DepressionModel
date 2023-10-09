@@ -10,11 +10,9 @@ using Statistics
 include("parameters.jl") 
 include("analytics.jl")
 include("calibration.jl")
-include("feedback.jl")
 
 # all possible states a person can be in
 @enum State healthy depressed
-@enum SES high middle low
 # this is our agent type
 mutable struct SimplePerson
     
@@ -31,22 +29,26 @@ mutable struct SimplePerson
     # state the person is in 
     state::State
     
-    ses::SES
+    # 1 -> kein Schulabschluss, 2 -> Schulabschluss, 3 -> Ausbildung, 4->Studium
+    education::Int64
+    # Skala von 0 bis 100
+    income::Float64
+   
 
     prob_ther::Float64
     susceptibility::Float64
     risk::Float64
 
-
-    #Eigenschaften für Feedbackeffekte
-    acachievement::Float64
+    #estimated length of current relationship and current duration
+    rellength::Int64
+    currdur::Int64
 
 end
 
 
 # how we construct a person object
-SimplePerson() = SimplePerson([], [], [], [], [], 0, healthy, middle, 0, 0, 0, 0)   # default Person is susceptible and has no contacts
-SimplePerson(state) = SimplePerson([], [], [], [], [], 0, state, middle, 0, 0, 0, 0)  # default Person has no contacts
+SimplePerson() = SimplePerson([], [], [], [], [], 0, healthy, 1, 0, 0, 0, 0, 0, 0)   # default Person is susceptible and has no contacts
+SimplePerson(state) = SimplePerson([], [], [], [], [], 0, state, 1, 0, 0, 0, 0, 0, 0)  # default Person has no contacts
 
 
 # this is a parametric type
@@ -119,93 +121,244 @@ end
 function population_update!(person, sim, para)
 
     person.age += 1
-
-    #über 100-Jährige sterben lassen
-    if person.age > 100
-        newkid = SimplePerson()
-
-        #Eltern für neues Kind finden
-        i = rand(1:length(sim.pop_potentialparents))
-        parent = sim.pop_potentialparents[i]
-        index = findfirst(p -> p == parent, sim.pop)
-
-        #SES und susceptibility: gleicher SES wie Eltern aber bisschen andere susceptibility
-        newkid.ses = parent.ses
-        newkid.susceptibility =  (para.h * ((parent.susceptibility + parent.spouse[1].susceptibility)/2) + ((1-para.h) * rand(Normal(1,para.b))))
-
-
-        push!(newkid.parents, pop[index])
-        push!(newkid.parents, pop[index].spouse[1])
-        push!(pop[index].children, newkid)
-        push!(pop[index].spouse[1].children, newkid)
-
-        if rand() < para.p_kids[length(pop[index].children)]
-            sim.pop_potentialparents[i] = last(sim.pop_potentialparents)
-            pop!(sim.pop_potentialparents)            
-        end
-
-        #Mensch sterben lassen und durch neues Kind ersetzen
-        replace!(pop, person => newkid)
-        return 
+    
+    #Menschen sterben lassen: hier hab ichs noch nicht besser hingekriegt
+    if person.age > 80
+        new = newkid(sim, para)
+        death!(person, sim, new)
+        return
     end
 
-    if person.age > 18
+    #Menschen ab 18 sind single
+    if person.age == 18 
         push!(sim.pop_singles, person)
     end
 
     #ist die Person single? Dann bestimmte Wahrscheinlichkeit einen Partner zu finden
-    if length(person.spouse) == 0 && rand() < para.findingpartner
-        #solange noch kein Partner gefunden wurde, durchlaufen lassen
-        while length(person.spouse) == 0
-            #Wahrscheinlichkeit aus dem gleichen Umfeld zu kommen, wird dann nochmal hälftig auf Freundeskreis und hälftig auf Bekanntenkreis aufgeteilt
-            if rand()< para.partnersamecircle
-                if rand() < 0.5
-                    x = rand(1:length(person.friends))
-                    potpartner = person.friends[x]
+    if length(person.spouse) == 0 && rand() < para.findingpartner && person.age >= 18 
+        newpartner!(person, sim, para)
+    end
 
-                else
-                    x = rand(1:length(person.ac))
-                    potpartner = person.ac[x]
-                end
-            else
-                x = rand(1:length(sim.pop_singles))
-                potpartner = sim.pop_singles[x]
-            end
+    #Wie lange läuft die Beziehung schon? Auf Trennung testen!
+    if length(person.spouse) > 0
+        person.currdur +=1
+        if person.currdur > person.rellength
+            splitup!(person, sim) 
+        end
+    end
 
-            #Bedingungen: Partner muss single sein, der Altersunterschied darf nicht zu groß sein und der SES muss gleich sein
-            if length(potpartner.spouse) == 0 && ((potpartner.age - person.age) < 5) && ((potpartner.age - person.age) > -5) && potpartner.ses == person.ses
-                push!(person.spouse, potpartner)
-                push!(potpartner.spouse, person)
+    #SÖS: ergibt sich aus SÖS der Eltern, bisschen Zufall aber enthalten, da Intervall des Incomes bei Berechnung des incomes aus Bildungsstand heraus bisschen überlappt für jeden Bildungsstand
+    #hier wird quasi erwarteter Bildungsstand berechnet
 
-                x = findfirst(p -> p == person, sim.pop_singles)
-                sim.pop_singles[x] = last(sim.pop_singles)
-                pop!(sim.pop_singles)
+    if person.age == 18
+        parentalincome = (person.parents[1].income + person.parents[2].income / 2)
 
-                x = findfirst(p -> p == potpartner, sim.pop_singles)
-                sim.pop_singles[x] = last(sim.pop_singles)
-                pop!(sim.pop_singles)
+        if parentalincome >= 75
+            person.education = 4
+        elseif parentalincome >= 50
+            person.education = 3
+        elseif parentalincome >= 25
+            person.education = 2
+        else 
+            person.education = 1
+        end
 
-                if rand() > para.p_none
-                    push!(sim.pop_potentialparents, person)
-                    push!(sim.pop_potentialparents, potpartner)
-                end
-            end
+    end
 
+    #Wenn Personen in diesen Altersklassen Depressionen entwickeln, kann es sein, dass sie den "erwarteten" Bildungsstand nicht erreichen
+    if person.age >= 18 && person.age <= 25 && person.state == depressed && person.education > 1
+        if rand() < para.depressiondropout
+            person.education = person.education - 1
+        end
+    end
+
+    #Einstieg ins Berufsleben
+    if person.age == 25
+        calculateincome!(person)
+    end
+
+    #Falls Depressionen im Erwachsenenalter auftreten, kann Job verloren gehen und dann verschlechtert sich finanzielle Situation
+    if person.age > 25 && person.state == depressed && person.income >= 10
+        if rand() < para.depression_jobloss
+            person.income = person.income - 10
         end
     end
 
 end
+function newkid(sim, para)
+    newkid = SimplePerson()
+
+    #Eltern für neues Kind finden
+    i = rand(1:length(sim.pop_potentialparents))
+    parent = sim.pop_potentialparents[i]
+
+    #SES und susceptibility: gleicher SES wie Eltern aber bisschen andere susceptibility
+    newkid.susceptibility =  (para.h * ((parent.susceptibility + parent.spouse[1].susceptibility)/2) + ((1-para.h) * rand(Normal(1,para.b))))
+
+    push!(newkid.parents, parent)
+    push!(newkid.parents, parent.spouse[1])
+    push!(parent.children, newkid)
+    push!(parent.spouse[1].children, newkid)
+
+    #neue Menschen brauchen Freunde und Bekannte, das dürfen aber nicht sie selber sein 
+
+    number_ac = rand(Poisson(para.p_ac))
+    number_fr = rand(Poisson(para.p_fr))
+    while length(newkid.ac) < number_ac
+        pos_ac = sim.pop[rand(1:1000)]
+        if pos_ac != newkid 
+            push!(pos_ac.ac, newkid)
+            push!(newkid.ac, pos_ac)
+        end
+    end
+    while length(newkid.friends) < number_fr
+        pos_fr = sim.pop[rand(1:1000)]
+        if pos_fr != newkid
+            push!(pos_fr.friends, newkid)
+            push!(newkid.friends, pos_fr)
+        end
+    end
+
+
+    #werden Eltern gelöscht oder bleiben auf der Liste potentieller Eltern? Außerdem können sie mehr als drei Kinder kriegen
+    if length(parent.children) > 3 
+
+        if  rand() < (para.p_kids[3])
+            deleteat!(sim.pop_potentialparents, findall(x->x==parent, sim.pop_potentialparents))
+            deleteat!(sim.pop_potentialparents, findall(x->x== parent.spouse[1], sim.pop_potentialparents)) 
+        end 
+
+    elseif rand() < para.p_kids[length(parent.children)] 
+
+        deleteat!(sim.pop_potentialparents, findall(x->x==parent, sim.pop_potentialparents))
+        deleteat!(sim.pop_potentialparents, findall(x->x== parent.spouse[1], sim.pop_potentialparents))   
+    
+    end
+
+    return newkid 
+
+end
+function death!(person, sim, newkid)
+
+    #Sterbeprozess
+    #Partner der sterbenden Person: falls vorhanden wird wieder single und von Liste potentieller Eltern entfernt, gemeinsam mit sterbender Person
+    if length(person.spouse)> 0
+        push!(sim.pop_singles, person.spouse[1])
+        
+        deleteat!(sim.pop_potentialparents, findall(x->x== person, sim.pop_potentialparents))     
+        deleteat!(sim.pop_potentialparents, findall(x->x == person.spouse[1], sim.pop_potentialparents))  
+
+        pop!(person.spouse[1].spouse)
+    else
+        deleteat!(sim.pop_singles, findfirst(x->x==person, sim.pop_singles))
+    end
+
+    #Person muss noch von Listen aller ihr bekannten und befreundeten Personen gelöscht werden, denn hier kann kein Kontakt mehr bestehen
+    if length(person.friends)>0
+        for i=1:length(person.friends)
+            deleteat!(person.friends[i].friends, findfirst(x->x==person, person.friends[i].friends))
+        end
+    end
+    if length(person.ac)>0
+        for i in eachindex(person.ac)
+            deleteat!(person.ac[i].ac, findfirst(x->x==person, person.ac[i].ac))
+        end
+    end
+
+
+    #Mensch sterben lassen und durch neues Kind ersetzen: ist replace hier sinnvoll?
+    replace!(sim.pop, person => newkid)
+end
+
+function newpartner!(person, sim, para)
+
+    #solange noch kein Partner gefunden wurde, durchlaufen lassen, um aber festhängen zu vermeiden, maximal 100 mal
+    counter = 0
+
+    while length(person.spouse) == 0 && counter <= 100
+        #Wahrscheinlichkeit aus dem gleichen Umfeld zu kommen, wird dann nochmal hälftig auf Freundeskreis und hälftig auf Bekanntenkreis aufgeteilt
+        if rand()< para.partnersamecircle
+            if rand() < 0.5 && length(person.friends)>0
+                x = rand(1:length(person.friends))
+                potpartner = person.friends[x]
+            else
+                x = rand(1:length(person.ac))
+                potpartner = person.ac[x]
+            end
+        else
+            x = rand(1:length(sim.pop_singles))
+            potpartner = sim.pop_singles[x]
+        end
+
+        #Bedingungen: Partner muss single sein, der Altersunterschied darf nicht zu groß sein und der SES muss gleich sein, außerdem dürfen es nicht sie selber sein
+        if length(potpartner.spouse) == 0 && ((potpartner.age - person.age) <= 5) && ((potpartner.age - person.age) >= -5) && potpartner.education == person.education && potpartner.age >= 18 && potpartner != person
+
+            #für beide die Beziehungsdauer bestimmen
+            person.rellength = rand(Poisson(para.durations[rand(1:length(para.durations))]))
+            potpartner.rellength = person.rellength
+            push!(person.spouse, potpartner)
+            push!(potpartner.spouse, person)
+
+            deleteat!(sim.pop_singles, findall(x->x== person, sim.pop_singles))       
+            deleteat!(sim.pop_singles, findall(x->x== potpartner, sim.pop_singles))     
+
+            #Personen landen auf der Liste bei bestimmter Wahrscheinlichkeit: ab 55 Jahren können sie keine Kinder mehr bekommen
+            if rand() > para.p_none && person.age < 55 && potpartner.age < 55
+                push!(sim.pop_potentialparents, person)
+                push!(sim.pop_potentialparents, potpartner)
+            end
+        end
+        counter += 1
+    end
+end
+
+function splitup!(person, sim)
+
+    #Beziehungsparameter wieder auf 0 setzen
+    person.currdur = 0
+    person.spouse[1].currdur = 0
+
+    person.rellength = 0
+    person.spouse[1].rellength = 0
+
+    #wieder auf Listen der Singles setzen und von Liste potenzieller Eltern entfernen
+    push!(sim.pop_singles, person)
+    push!(sim.pop_singles, person.spouse[1])
+
+    deleteat!(sim.pop_potentialparents, findall(x->x== person, sim.pop_potentialparents))       
+    deleteat!(sim.pop_potentialparents, findall(x->x== person.spouse[1], sim.pop_potentialparents)) 
+    
+    #Trennung einleiten
+    pop!(person.spouse[1].spouse)
+    pop!(person.spouse)
+
+end
+
+function calculateincome!(person)
+
+    #Einkommen wird bestimmt aus Bildungsstand, aber Intervalle für jeden Bildungsstand überlappen etwas, man kann also auch in anderer Einkommenklasse landen (Normalverteilungen je Bildungsstand mit Mittelwerten bei 1 --> 13, 2 --> 38, 3 --> 63, 4--> 88 und Standardabweichung von 15)
+
+    person.income = rand(Normal((person.education * 25) - 12, 15))
+
+    if person.income < 0
+    person.income = 0.0
+    elseif person.income >100
+    person.income = 100.0
+    end
+        
+end
+
 function therapy!(person, para)
 
     #Wahrscheinlichkeit sich in Therapie zu begeben in Abhängigkeit des SÖS
-    if person.ses == high 
-        person.prob_ther = para.avail_high
-    end
-    if person.ses == middle 
-        person.prob_ther = para.avail_middle
-    end
-    if person.ses == low 
-        person.prob_ther = para.avail_low
+    if person.age >= 18
+        if person.income >= 75
+            person.prob_ther = para.avail_high
+        elseif person.income >= 25
+            person.prob_ther = para.avail_middle
+        else
+            person.prob_ther = para.avail_low
+        end
     end
     
     #Annahme, dass Therapiemotivation mit weniger Erfolg sinkt
@@ -218,8 +371,6 @@ function therapy!(person, para)
 end
 
 function ratetoprob(r)
-
-    
     return r * exp(-r)
 end
 
@@ -285,10 +436,10 @@ function setup_mixed(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kid
     end
 
 
-    #Männern einen SÖS zuweisen und diesen dann für den Rest der Familie übernehmen
-     ses = [high, middle, low]
+    #Männern einen Bildungsstand zuweisen und diesen dann für den Rest der Familie übernehmen
      for i in eachindex(men)
-         men[i].ses = ses[rand(1:3)]
+         men[i].education = rand(1:4)
+         calculateincome!(men[i])
          men[i].susceptibility = rand(Normal(1,para.b))
      end
 
@@ -301,16 +452,34 @@ function setup_mixed(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kid
         man = men[x]
         woman = women[y]
 
-        #gleicher SÖS aber andere susceptibility, beide nicht mehr single
-        woman.ses = man.ses
-        woman.susceptibility = rand(Normal(1, para.b))
+        while length(man.spouse) < 1
+            #als Partner gegenseitig eintragen, wenn Altersunterschied ok ist, anschließend in Population einfügen
+            if ((man.age - woman.age) <= 5) || ((man.age - woman.age) >= -5)
+                push!(man.spouse, woman)
+                push!(woman.spouse, man)
+            else 
+                x = rand(1:length(men))
+                y = rand(1:length(women))
+                man = men[x]
+                woman = women[y]
+            end
+        end
 
-        #als Partner gegenseitig eintragen, anschließend in Population einfügen
-        push!(man.spouse, woman)
-        push!(woman.spouse, man)
         push!(pop, man)
         push!(pop, woman)
-        
+
+        #Beziehungsdauer bestimmen und aktuelle Beziehungslänge auf zufälligen Wert innerhalb des Intervalls setzen
+        man.rellength = rand(Poisson(para.durations[rand(1:length(para.durations))]))
+        woman.rellength = man.rellength
+
+        man.currdur = rand(0:man.rellength)
+        woman.currdur = man.currdur
+
+
+        #gleicher SÖS aber andere susceptibility
+        woman.education = man.education
+        calculateincome!(woman)
+        woman.susceptibility = rand(Normal(1, para.b))
 
         #letzte Person auf diese Stelle kopieren und anschließend letzte Person löschen
         men[x] = last(men)
@@ -321,73 +490,60 @@ function setup_mixed(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kid
     end
 
     #ordne Kinder diesen Partnern zu
-    
     for i in eachindex(kids)
         #hier könnte ich auch einfach Länge der Population nehmen? Bis jetzt befinden sich in dieser ja nur Paare
         x = rand(1:(para.n_fam*2))   
-
-        #gleicher SÖS wie Eltern, susceptibility als Mittelwert der susceptibility der Eltern plus einem kleinen Wert aus Normalverteilung
-        kids[i].ses = pop[x].ses 
 
         #die sus der Kinder besteht zu einem Teil aus der der Eltern und zu einem Teil aus Umwelteinflüssen: Anteile können über para.h verändert werden
         kids[i].susceptibility =  (para.h * ((pop[x].susceptibility + pop[x].spouse[1].susceptibility)/2) + ((1-para.h) * rand(Normal(1,para.b))))
 
 
         push!(pop, kids[i])
-        push!(last(pop).parents, pop[x])
-        push!(pop[x].children, last(pop))
+        push!(kids[i].parents, pop[x])
+        push!(pop[x].children, kids[i])
 
         #jeweiliger Partner wird als Elternteil eingetragen und bei diesem das Kind gespeichert
-        push!(pop[x].spouse[1].children, last(pop))
-        push!(last(pop).parents, pop[x].spouse[1])
+        push!(pop[x].spouse[1].children, kids[i])
+        push!(kids[i].parents, pop[x].spouse[1])
         
     end
     
     #finde Paare ohne Kinder und trage sie auf Liste der potentiellen Eltern ein
     for person in pop
-        if length(person.children) == 0
+        if length(person.children) == 0 && length(person.spouse) > 0
             push!(pop_potentialparents, person)
         end
     end
 
     #restlichen Frauen auch einen SÖS zuordnen und übrig Gebliebene einsortieren
     for i in eachindex(women)
-        women[i].ses = ses[rand(1:3)]
+        women[i].education = rand(1:4)
+        calculateincome!(women[i])
         women[i].susceptibility = rand(Normal(1,para.b))
     end
     append!(pop_singles, men, women)
     append!(pop, men, women)
-    
 
-    # go through all combinations of agents and 
-    # check if they are connected
-    
-    #vorheriges Vorgehen
-    # for i in eachindex(pop)
-    #     for j in i+1:length(pop)
-    #         if rand() < para.p_ac && !(pop[i] in pop[j].spouse) && !(pop[i] in pop[j].children) && !(pop[i] in pop[j].parents)
-    #             push!(pop[i].ac, pop[j])
-    #             push!(pop[j].ac, pop[i])
-    #         elseif rand() < para.p_fr && !(pop[i] in pop[j].spouse) && !(pop[i] in pop[j].children) && !(pop[i] in pop[j].parents)
-    #             push!(pop[i].friends, pop[j])
-    #             push!(pop[j].friends, pop[i])
-    #         end
-    #     end
-    # end
-
+    #Bekannte und Freunde finden
     for i in eachindex(pop)
         number_ac = rand(Poisson(para.p_ac))
         number_fr = rand(Poisson(para.p_fr))
         while length(pop[i].ac) < number_ac
             pos_ac = pop[rand(1:1000)]
-            push!(pos_ac.ac, pop[i])
-            push!(pop[i].ac, pos_ac)
+            #nicht sich selber als Bekannter haben
+            if pos_ac != pop[i]
+                push!(pos_ac.ac, pop[i])
+                push!(pop[i].ac, pos_ac)
+            end
            
         end
         while length(pop[i].friends) < number_fr
             pos_fr = pop[rand(1:1000)]
-            push!(pos_fr.friends, pop[i])
-            push!(pop[i].friends, pos_fr)
+            #nicht sich selber als Freund haben
+            if pos_fr != pop[i]
+                push!(pos_fr.friends, pop[i])
+                push!(pop[i].friends, pos_fr)
+            end
             
         end
     end
@@ -399,8 +555,6 @@ end
 function  setup_sim(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
     # for reproducibility
     Random.seed!(para.seed)
-
-    
 
     # create a population of agents, fully mixed
     pop, pop_singles, pop_potentialparents = setup_mixed(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
@@ -430,14 +584,14 @@ function run_sim(sim, n_steps, para, fdbck, verbose = false)
         push!(n_depressed, count(p -> p.state == depressed, sim.pop)/length(sim.pop))
         push!(n_healthy, count(p -> p.state == healthy, sim.pop)/length(sim.pop))
 
-        push!(n_depressed_high, count(p -> p.state == depressed && p.ses == high, sim.pop)/length(sim.pop))
-        push!(n_healthy_high, count(p -> p.state == healthy && p.ses == high, sim.pop)/length(sim.pop))
+        push!(n_depressed_high, count(p -> p.state == depressed && p.income >= 75, sim.pop)/length(sim.pop))
+        push!(n_healthy_high, count(p -> p.state == healthy && p.income >= 75, sim.pop)/length(sim.pop))
 
-        push!(n_depressed_middle, count(p -> p.state == depressed && p.ses == middle, sim.pop)/length(sim.pop))
-        push!(n_healthy_middle, count(p -> p.state == healthy && p.ses == middle, sim.pop)/length(sim.pop))
+        push!(n_depressed_middle, count(p -> p.state == depressed && p.income >= 25, sim.pop)/length(sim.pop))
+        push!(n_healthy_middle, count(p -> p.state == healthy && p.income >= 25, sim.pop)/length(sim.pop))
 
-        push!(n_depressed_low, count(p -> p.state == depressed && p.ses == low, sim.pop)/length(sim.pop))
-        push!(n_healthy_low, count(p -> p.state == healthy && p.ses == low, sim.pop)/length(sim.pop))
+        push!(n_depressed_low, count(p -> p.state == depressed && p.income < 25, sim.pop)/length(sim.pop))
+        push!(n_healthy_low, count(p -> p.state == healthy && p.income < 25, sim.pop)/length(sim.pop))
         # a bit of output
         if verbose
             println(t, ", ", n_depressed[end], ", ", n_healthy[end])
@@ -459,25 +613,18 @@ function standard!()
     d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids = pre_setup()
     para = Parameters()
     sim = setup_sim(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
-    depr, heal, deprhigh, healhigh, deprmiddle, healmiddle, deprlow, heallow = run_sim(sim, 50, para, 0)
+    depr, heal, deprhigh, healhigh, deprmiddle, healmiddle, deprlow, heallow = run_sim(sim, 100, para, 0)
     printpara!(sim)
-    # angenommen, dass Möglichkeit zur Therapie von SÖS abhängt
+    
     #Plots.plot([heal, depr, healhigh, deprhigh, healmiddle, deprmiddle, heallow, deprlow], labels = ["healthy" "depressed" "healthy high ses" "depressed high ses" "healthy middle ses" "depressed middle ses" "healthy low ses" "depressed low ses"])
 end
 
-function withfeedbckeff!()
-    d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids = pre_setup()
-    para = Parameters()
-    sim = setup_sim(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
-    feedbackeffect_academics(sim)
-    depr, heal, deprhigh, healhigh, deprmiddle, healmiddle, deprlow, heallow = run_sim(sim, 50, para, 1)
-    printpara!(sim)
-    achievementtoses(sim)
-end
+
+
+#calibration und analytics sind noch nicht auf die Änderungen angepasst
 
 #qual = approximation(60)
 #Plots.plot([qual], labels=["Qualität der Approximation"]) 
 
 standard!()
-#withfeedbckeff!()
 #sensi!()
