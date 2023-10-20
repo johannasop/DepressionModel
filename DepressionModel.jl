@@ -29,7 +29,7 @@ mutable struct SimplePerson
     # state the person is in 
     state::State
     
-    # 1 -> kein Schulabschluss, 2 -> Schulabschluss, 3 -> Ausbildung, 4->Studium
+    # 1 -> kein Schulabschluss, 2 -> Schulabschluss, 3 -> Ausbildung, 4-> Studium
     education::Int64
     # Skala von 0 bis 100
     income::Float64
@@ -43,12 +43,15 @@ mutable struct SimplePerson
     rellength::Int64
     currdur::Int64
 
+    #death this year
+    deathinyear::Int64
+
 end
 
 
 # how we construct a person object
-SimplePerson() = SimplePerson([], [], [], [], [], 0, healthy, 1, 0, 0, 0, 0, 0, 0)   # default Person is susceptible and has no contacts
-SimplePerson(state) = SimplePerson([], [], [], [], [], 0, state, 1, 0, 0, 0, 0, 0, 0)  # default Person has no contacts
+SimplePerson() = SimplePerson([], [], [], [], [], 0, healthy, 0, 0, 0, 0, 0, 0, 0, 0)   # default Person is susceptible and has no contacts
+SimplePerson(state) = SimplePerson([], [], [], [], [], 0, state, 0, 0, 0, 0, 0, 0, 0, 0)  # default Person has no contacts
 
 
 # this is a parametric type
@@ -67,6 +70,11 @@ end
 function update!(person, sim, para, fdbck)
  
     population_update!(person, sim, para)
+
+    #Person sollte dann auch niemanden mehr anstecken können
+    if person.deathinyear == 1
+        return
+    end
 
     parents = findfirst(p-> p.state == depressed, person.parents) !== nothing
     friends = findfirst(p-> p.state == depressed, person.friends) !== nothing
@@ -121,11 +129,10 @@ end
 function population_update!(person, sim, para)
 
     person.age += 1
-    
+
     #Menschen sterben lassen: hier hab ichs noch nicht besser hingekriegt
     if person.age > 80
-        new = newkid(sim, para)
-        death!(person, sim, new)
+        death!(person, sim)
         return
     end
 
@@ -151,7 +158,7 @@ function population_update!(person, sim, para)
     #hier wird quasi erwarteter Bildungsstand berechnet
 
     if person.age == 18
-        parentalincome = (person.parents[1].income + person.parents[2].income / 2)
+        parentalincome = ((person.parents[1].income + person.parents[2].income) / 2)
 
         if parentalincome >= 75
             person.education = 4
@@ -166,6 +173,8 @@ function population_update!(person, sim, para)
     end
 
     #Wenn Personen in diesen Altersklassen Depressionen entwickeln, kann es sein, dass sie den "erwarteten" Bildungsstand nicht erreichen
+
+
     if person.age >= 18 && person.age <= 25 && person.state == depressed && person.education > 1
         if rand() < para.depressiondropout
             person.education = person.education - 1
@@ -185,7 +194,12 @@ function population_update!(person, sim, para)
     end
 
 end
-function newkid(sim, para)
+function newkid!(sim, para)
+
+    if length(sim.pop_potentialparents) == 0
+        return
+    end
+
     newkid = SimplePerson()
 
     #Eltern für neues Kind finden
@@ -205,14 +219,14 @@ function newkid(sim, para)
     number_ac = rand(Poisson(para.p_ac))
     number_fr = rand(Poisson(para.p_fr))
     while length(newkid.ac) < number_ac
-        pos_ac = sim.pop[rand(1:1000)]
+        pos_ac = sim.pop[rand(1:length(sim.pop))]
         if pos_ac != newkid 
             push!(pos_ac.ac, newkid)
             push!(newkid.ac, pos_ac)
         end
     end
     while length(newkid.friends) < number_fr
-        pos_fr = sim.pop[rand(1:1000)]
+        pos_fr = sim.pop[rand(1:length(sim.pop))]
         if pos_fr != newkid
             push!(pos_fr.friends, newkid)
             push!(newkid.friends, pos_fr)
@@ -235,10 +249,10 @@ function newkid(sim, para)
     
     end
 
-    return newkid 
+    push!(sim.pop, newkid)
 
 end
-function death!(person, sim, newkid)
+function death!(person, sim)
 
     #Sterbeprozess
     #Partner der sterbenden Person: falls vorhanden wird wieder single und von Liste potentieller Eltern entfernt, gemeinsam mit sterbender Person
@@ -266,8 +280,9 @@ function death!(person, sim, newkid)
     end
 
 
-    #Mensch sterben lassen und durch neues Kind ersetzen: ist replace hier sinnvoll?
-    replace!(sim.pop, person => newkid)
+    #Mensch aus Population entfernen
+    person.deathinyear = 1
+
 end
 
 function newpartner!(person, sim, para)
@@ -378,10 +393,23 @@ function update_agents!(sim, para, fdbck)
     # we need to change the order, otherwise agents at the beginning of the 
     # pop array will behave differently from those further in the back
     sim.pop = shuffle(sim.pop)
+
+    i = length(sim.pop)
     
-    for p in sim.pop
-        update!(p, sim, para, fdbck)
+    while i > 0
+        update!(sim.pop[i], sim, para, fdbck)
+
+        if sim.pop[i].deathinyear==1
+            deleteat!(sim.pop, findfirst(x-> x==sim.pop[i], sim.pop))
+        end
+
+        i -= 1
     end
+
+    while length(sim.pop) < para.n 
+        newkid!(sim, para)
+    end
+
 end   
 
 function pre_setup()
@@ -524,6 +552,7 @@ function setup_mixed(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kid
     append!(pop_singles, men, women)
     append!(pop, men, women)
 
+
     #Bekannte und Freunde finden
     for i in eachindex(pop)
         number_ac = rand(Poisson(para.p_ac))
@@ -578,6 +607,16 @@ function run_sim(sim, n_steps, para, fdbck, verbose = false)
     n_depressed_low = Float64[]
     n_healthy_low = Float64[]
 
+    avg_d = 0.0
+    avg_h = 0.0
+    depr_income = Float64[]
+    health_income = Float64[]
+
+    c1 = Int64[]
+    c2 = Int64[]
+    c3 = Int64[]
+    c4 = Int64[]
+
     # simulation steps
     for t in  1:n_steps
         update_agents!(sim, para, fdbck)
@@ -596,25 +635,142 @@ function run_sim(sim, n_steps, para, fdbck, verbose = false)
         if verbose
             println(t, ", ", n_depressed[end], ", ", n_healthy[end])
         end
-        sim.time = sim.time + 1
+        sim.time += 1
+
+        #Daten für Feedback
+        avg_d, avg_h = feedback_analytics(sim)
+        push!(depr_income, avg_d)
+        push!(health_income, avg_h)
+ 
+        #Daten für Anzahl an Personen pro Bildungsstand
+        cone, ctwo, cthree, cfour = educationlevels(sim)
+
+        push!(c1, cone)
+        push!(c2, ctwo)
+        push!(c3, cthree)
+        push!(c4, cfour)
         #data = observe(Data, sim)
         #log_results(stdout, data)
 
     end
     
+    #consistencycheck!(sim)
+
     # return the results (normalized by pop size)
     n = length(sim.pop)
-    n_depressed, n_healthy , n_depressed_high, n_healthy_high, n_depressed_middle, n_healthy_middle,  n_depressed_low, n_healthy_low
+    n_depressed, n_healthy , n_depressed_high, n_healthy_high, n_depressed_middle, n_healthy_middle,  n_depressed_low, n_healthy_low, depr_income, health_income, c1, c2, c3, c4
 end
 
+function consistencycheck!(sim)
+
+    for person in sim.pop
+        for parent in person.parents
+            if parent == person 
+                println("inconsistent: parent is person")
+            elseif parent in person.friends
+                println("parent is friend")
+            elseif parent in person.ac 
+                println("parent is ac")
+            elseif parent in person.spouse
+                println("parent is spouse")
+            elseif parent in person.children
+                println("parent is child")
+            end
+        end
+        for friend in person.friends
+            if person == friend
+                println("inconsistent: friend is person")
+            elseif friend in person.parents
+                println("friend is parent")
+            elseif friend in person.spouse
+                println("friend is spouse")
+            elseif friend in person.ac 
+                println("friend is ac")
+            elseif friend in person.children
+                println("friend is child")
+            end
+        end
+        for ac in person.ac
+            if person == ac
+                println("inconsistent: ac is person")
+            elseif ac in person.friends
+                println("ac is friend")
+            elseif ac in person.parents
+                println("ac is parent")
+            elseif ac in person.spouse
+                println("ac is spouse")
+            elseif ac in person.children
+                println("ac is child")
+            end
+        end
+        for child in person.children
+            if person == child 
+                println("inconsistent: person is child")
+            elseif child in person.friends
+                println("child is friend")
+            elseif child in person.ac 
+                println("child is ac")
+            elseif child in person.spouse
+                println("child is spouse")
+            elseif child in person.parents
+                println("child is parent")
+            end
+        end
+        for spouse in person.spouse
+            if person == spouse 
+                println("inconsistent: person is spouse")
+            elseif spouse in person.friends
+                println("spouse is friend")
+            elseif spouse in person.ac 
+                println("spouse is ac")
+            elseif spouse in person.parents
+                println("spouse is parent")
+            elseif spouse in person.children
+                println("spouse is child")
+            end
+        end
+    end
 
 
+
+end
+function feedback_analytics(sim)
+
+   avg_d = 0.0
+   d_count = 0.0
+   avg_h = 0.0
+   h_count = 0.0
+
+   for person in sim.pop
+        if person.state == depressed
+            d_count += 1
+            avg_d += person.income
+        elseif person.state == healthy
+            h_count +=1
+            avg_h += person.income
+        end
+   end
+
+   return (avg_d/d_count), (avg_h/h_count)
+end
+function educationlevels(sim)
+    counterone = count(p->p.education==1, sim.pop)
+    countertwo = count(p->p.education==2, sim.pop)
+    counterthree = count(p->p.education == 3, sim.pop)
+    counterfour = count(p->p.education == 4, sim.pop)
+
+    return counterone, countertwo, counterthree, counterfour
+end
 function standard!()
     d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids = pre_setup()
     para = Parameters()
     sim = setup_sim(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
-    depr, heal, deprhigh, healhigh, deprmiddle, healmiddle, deprlow, heallow = run_sim(sim, 100, para, 0)
+    depr, heal, deprhigh, healhigh, deprmiddle, healmiddle, deprlow, heallow, array_depr, array_health, c1, c2, c3, c4 = run_sim(sim, 1000, para, 0)
     printpara!(sim)
+
+    #Plots.plot([c1, c2, c3, c4], labels =["1" "2" "3" "4"])
+
+    Plots.plot([array_depr, array_health], labels = ["depressed: average income" "healthy: average income"])
     
     #Plots.plot([heal, depr, healhigh, deprhigh, healmiddle, deprmiddle, heallow, deprlow], labels = ["healthy" "depressed" "healthy high ses" "depressed high ses" "healthy middle ses" "depressed middle ses" "healthy low ses" "depressed low ses"])
 end

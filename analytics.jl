@@ -2,6 +2,7 @@
 #Ratenberechnung zur Überprüfung
 function ratedep(sim)
     counter = count(p->p.state==depressed, sim.pop)
+    
     return counter/length(sim.pop)
 end
 
@@ -10,16 +11,13 @@ function ratedep_parents(sim)
     deprcounter_parents = 0
 
     for p in sim.pop 
-
         counter = count(p->p.state==depressed, p.parents)
-
         if counter > 0
             popcounter_parents+= 1
             if p.state == depressed 
                 deprcounter_parents +=1
             end
         end
-        
     end
     return deprcounter_parents/popcounter_parents
 end
@@ -29,34 +27,28 @@ function ratedep_friends(sim)
     deprcounter_friends = 0
 
     for p in sim.pop 
-       
         counter = count(p->p.state==depressed, p.friends)
-
         if counter > 0
             popcounter_friends+= 1
             if p.state == depressed 
                 deprcounter_friends +=1
             end
         end
-        
     end
     return deprcounter_friends/popcounter_friends
 end
 function ratedep_ac(sim)
     popcounter_ac = 0
     deprcounter_ac = 0
+
     for p in sim.pop 
-
         counter = count(p->p.state==depressed, p.ac)
-
-
         if counter > 0
             popcounter_ac+= 1
             if p.state == depressed 
                 deprcounter_ac +=1
             end
         end
-       
     end
     return deprcounter_ac/popcounter_ac
 end
@@ -64,8 +56,8 @@ end
 function ratedep_child(sim)
     popcounter_children = 0
     deprcounter_children = 0
+
     for p in sim.pop 
-       
         counter = count(p->p.state==depressed, p.children)
 
         if counter > 0
@@ -82,8 +74,8 @@ end
 function ratedep_spouse(sim)
     popcounter_spouse = 0
     deprcounter_spouse = 0
-    for p in sim.pop 
 
+    for p in sim.pop 
         if length(p.spouse) > 0 && p.spouse[1].state == depressed
             popcounter_spouse += 1
             if p.state == depressed 
@@ -91,6 +83,7 @@ function ratedep_spouse(sim)
             end
         end 
     end
+
     return deprcounter_spouse/popcounter_spouse
 end
 
