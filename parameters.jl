@@ -2,28 +2,28 @@
 
 Base.@kwdef mutable struct Parameters
 
-    prev::Float64 = 0.12
+    prev::Float64 = 0.48
     rem::Float64 = 0.51
     rem_ther::Float64 = 0.45
     avail_high::Float64 = 0.5
     avail_middle::Float64 = 0.2
     avail_low::Float64 = 0.1
-    rate_parents::Float64 = 0.35
-    rate_friends::Float64 = 0.40
+    rate_parents::Float64 = 0.8
+    rate_friends::Float64 = 0.76
     rate_ac::Float64 = 0.16
-    rate_child::Float64 = 0.35
-    rate_spouse::Float64 = 0.30
+    rate_child::Float64 = 0.94
+    rate_spouse::Float64 = 0.91
     n::Int64 = 1000
     n_fam::Int64 = 300
-    p_ac::Float64 = 50
-    p_fr::Float64 = 15
-    seed::Int64 = 42
+    p_ac::Float64 = 15
+    p_fr::Float64 = 7
+    seed::Int64 = 27
 
     #Breite der Verteilung der susceptibility
     b::Float64 = 0.1
 
     #Heritabilitätsindex(?)
-    h::Float64 = 0.0
+    h::Float64 = 0.09
 
     #Wahrscheinlichkeiten für unterschiedliche Anzahl von Kindern
     p_none::Float64 = 0.18
@@ -35,8 +35,12 @@ Base.@kwdef mutable struct Parameters
     partnersamecircle::Float64 = 0.7
     durations::Vector{Int64} = [3, 7, 15]
 
+    #Einkommensverteilung sd 
+    sd_income::Float64 = 7.5
+
     #Wahrscheinlichkeit wegen Depression Bildungsweg zu verlassen: hier noch nach korrekten Zahlen schauen
-    depressiondropout::Float64 = 0.1
+    depressiondropout::Float64 = 0.05
     depression_jobloss::Float64 = 0.05
+    better_edu_thanparents::Float64 = 0.02
 
 end
