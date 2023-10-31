@@ -609,7 +609,9 @@ end
 
 function  setup_sim(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
     # for reproducibility
-    Random.seed!(para.seed)
+    if para.seed > 0
+	    Random.seed!(para.seed)
+    end
 
     # create a population of agents, fully mixed
     pop, pop_singles, pop_potentialparents = setup_mixed(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
@@ -897,7 +899,7 @@ end
 #qual = approximation_rates(10, false, false) 
 #Plots.plot([qual], labels=["mittlere Abweichung"]) 
 
-qual= optimization_current_para(5, false, false)
+qual= optimization_current_para(50, false, false)
 Plots.plot([qual], labels=["mittlere Abweichung"]) 
 
 

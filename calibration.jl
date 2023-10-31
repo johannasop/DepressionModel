@@ -21,7 +21,7 @@ function eval_rr_multipleseeds(data_rr_par, data_rr_fr, data_rr_ac, data_rr_sp, 
     meanfit = 0.0
 
     for i=1:5
-        new_paras.seed = rand(1:100)
+        new_paras.seed = 0#rand(1:100)
         sim = setup_sim(new_paras, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
         run_sim(sim, 50, new_paras, fdbck_education, fdbck_income)
 
@@ -35,7 +35,7 @@ function eval_rates_multipleseeds(data_prev, data_rate_par, data_rate_fr, data_r
     meanfit = 0.0
 
     for i=1:5
-        new_paras.seed = rand(1:100)
+        new_paras.seed = 0#rand(1:100)
         sim = setup_sim(new_paras, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
         run_sim(sim, 50, new_paras, fdbck_education, fdbck_income)
 
@@ -173,8 +173,8 @@ function optimization_current_para(steps, fdbck_education, fdbck_income, npoints
     push!(pq_rates, Paraqualityrates(new_paras, qual_rates_new_paras))
 
     for i=2:npoints
-        new_rand_paras = paraplusnorm(new_paras)
-        qual_rates_new_paras = eval_rates_multipleseeds(0.08, 0.24, 0.32, 0.12, 0.32, 0.24, new_paras, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids, fdbck_education, fdbck_income)
+        new_rand_paras = randpara() #paraplusnorm(new_paras)
+        qual_rates_new_paras = eval_rates_multipleseeds(0.08, 0.24, 0.32, 0.12, 0.32, 0.24, new_rand_paras, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids, fdbck_education, fdbck_income)
         push!(pq_rates, Paraqualityrates(new_rand_paras, qual_rates_new_paras))
         print(".")
     end
@@ -194,7 +194,7 @@ function optimization_current_para(steps, fdbck_education, fdbck_income, npoints
 
 
         for i=1:(npoints ÷ 2)
-            new_paras_rates = paraplusnorm(pq_rates[trunc(Int64, rand(truncated(Normal(0, npoints/6); lower = 1
+            new_paras_rates = paraplusnorm(pq_rates[trunc(Int64, rand(truncated(Normal(0, npoints/6); lower = 1, upper = npoints ÷ 2
             )))].parameters)
 
             qual_rates_new_paras = eval_rates_multipleseeds(0.08, 0.24, 0.32, 0.12, 0.32, 0.24, new_paras_rates, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids, fdbck_education, fdbck_income)
