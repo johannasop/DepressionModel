@@ -8,22 +8,25 @@ function evaluationrr(sim, data_rr_par, data_rr_fr, data_rr_ac, data_rr_sp, data
     return ((data_rr_par - rr_par)^2 + (data_rr_fr - rr_fr)^2 ) /2
 end
 
-function evaluationrates(sim, data_prev, data_rate_parents, data_rate_friends, data_rate_ac, data_rate_children, data_rate_spouse)
+function evaluationrates(sim)
     #Evaluation der Raten
-    return ((data_prev - ratedep(sim))^2 + (data_rate_parents-ratedep_parents(sim))^2 + (data_rate_friends - ratedep_friends(sim))^2 + (data_rate_ac-ratedep_ac(sim))^2 + (data_rate_children - ratedep_child(sim))^2 + (data_rate_spouse - ratedep_spouse(sim))^2 )/6
+    o = Optimalrates()
+    return ((o.prev - ratedep(sim))^2 + (o.rate_parents-ratedep_parents(sim))^2 + (o.rate_friends - ratedep_friends(sim))^2 + (o.rate_ac-ratedep_ac(sim))^2 + (o.rate_child - ratedep_child(sim))^2 + (o.rate_spouse - ratedep_spouse(sim))^2 )/6
 
 end
 
 
 
 
-function eval_rr_multipleseeds(data_rr_par, data_rr_fr, data_rr_ac, data_rr_sp, data_rr_ch, new_paras, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids, fdbck_education, fdbck_income)
+
+
+function eval_rr_multipleseeds(data_rr_par, data_rr_fr, data_rr_ac, data_rr_sp, data_rr_ch, new_paras, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids, ther_restriction, fdbck_education, fdbck_income)
     meanfit = 0.0
 
     for i=1:5
-        new_paras.seed = rand(1:100)
+        new_paras.seed = 0#rand(1:100)
         sim = setup_sim(new_paras, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
-        run_sim(sim, 50, new_paras, fdbck_education, fdbck_income)
+        run_sim(sim, new_paras, ther_restriction, fdbck_education, fdbck_income)
 
         meanfit = meanfit + evaluationrr(sim, data_rr_par, data_rr_fr, data_rr_ac, data_rr_sp, data_rr_ch)
     end
@@ -31,17 +34,19 @@ function eval_rr_multipleseeds(data_rr_par, data_rr_fr, data_rr_ac, data_rr_sp, 
     return meanfit/5
 end
 
-function eval_rates_multipleseeds(data_prev, data_rate_par, data_rate_fr, data_rate_ac, data_rate_sp, data_rate_ch, new_paras, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids, fdbck_education, fdbck_income)
+#for Schleife auf 1 gesetzt weil seed ja eh gleich bleibt
+function eval_rates_multipleseeds(new_paras, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids, ther_restriction, fdbck_education, fdbck_income)
     meanfit = 0.0
 
-    for i=1:5
-        new_paras.seed = rand(1:100)
+    for i=1:1
+        new_paras.seed = 0#rand(1:100)
         sim = setup_sim(new_paras, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
-        run_sim(sim, 50, new_paras, fdbck_education, fdbck_income)
+        run_sim(sim, new_paras, ther_restriction, fdbck_education, fdbck_income)
 
-        meanfit = meanfit + evaluationrates(sim, data_prev, data_rate_par, data_rate_fr, data_rate_ac, data_rate_sp, data_rate_ch)
+        meanfit = meanfit + evaluationrates(sim)
     end
 
+    #das geteilt durch fünf müsste hier eigentlich weg, aber für die Vergleichbarkeit lasse ich es erstmal drin
     return meanfit/5
 end
 
@@ -65,7 +70,7 @@ function sensi!()
             for s in seeds
                     para = Parameters(rate_friends = f, rate_parents = p, seed = s)
                     sim = setup_sim(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
-                    depr, heal, deprhigh, healhigh, deprmiddle, healmiddle, deprlow, heallow = run_sim(sim, 50, para, 0)
+                    depr, heal, deprhigh, healhigh, deprmiddle, healmiddle, deprlow, heallow = run_sim(sim, para, true, false, false)
                     push!(placeholder, ratedep(sim), ratedep_parents(sim), ratedep_friends(sim), ratedep_ac(sim), ratedep_child(sim), ratedep_spouse(sim))
             end
             push!(df, placeholder)
@@ -76,7 +81,102 @@ function sensi!()
 
 end
 
+function qual_sensi!()
+    d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids = pre_setup()
 
+    parents = [0.0, 0.02, 0.05, 0.1, 0.3, 0.5]
+    friends = [0.0, 0.02, 0.05, 0.1, 0.3, 0.5]
+    h = [0.0, 0.02, 0.05, 0.1, 0.3, 0.5]
+
+    for i in eachindex(parents)
+        qual_par_fr = Float64[]
+
+        println("parents: ", parents[i])
+        for x in eachindex(friends)
+
+            paras = Parameters(rate_parents = parents[i], rate_friends= friends[x])
+
+            sim = setup_sim(paras, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
+            depr, heal, deprhigh, healhigh, deprmiddle, healmiddle, deprlow, heallow = run_sim(sim, paras, true, false, false)
+
+            push!(qual, evaluationrates(sim))
+        end
+        Plots.plot([qual], labels = "Qual: parents und friends")
+
+    end
+    for i in eachindex(parents)
+        qual = Float64[]
+
+        for x in eachindex(h)
+            paras = Parameters(rate_parents = parents[i], h= h[x])
+
+            sim = setup_sim(paras, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
+            depr, heal, deprhigh, healhigh, deprmiddle, healmiddle, deprlow, heallow = run_sim(sim, paras, true, false, false)
+
+            push!(qual, evaluationrates(sim))
+        end
+        Plots.plot([qual], labels = "Qual: parents und h")
+
+    end
+    for i in eachindex(h)
+        qual = Float64[]
+
+        for x in eachindex(friends)
+            paras = Parameters(h = h[i], rate_friends= friends[x])
+
+            sim = setup_sim(paras, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
+            depr, heal, deprhigh, healhigh, deprmiddle, healmiddle, deprlow, heallow = run_sim(sim, paras, true, false, false)
+
+            push!(qual, evaluationrates(sim))
+        end
+        Plots.plot([qual], labels = "Qual h und friends")
+
+    end
+
+    #hier dann nochmal mit umgekehrten Achsen
+    for i in eachindex(friends)
+        qual = Float64[]
+
+        for x in eachindex(parents)
+            paras = Parameters(rate_parents = parents[x], rate_friends= friends[i])
+
+            sim = setup_sim(paras, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
+            depr, heal, deprhigh, healhigh, deprmiddle, healmiddle, deprlow, heallow = run_sim(sim, paras, true, false, false)
+
+            push!(qual, evaluationrates(sim))
+        end
+        Plots.plot([qual], labels = "Qual: parents und friends")
+
+    end
+    for i in eachindex(h)
+        qual = Float64[]
+
+        for x in eachindex(parents)
+            paras = Parameters(rate_parents = parents[x], h= h[i])
+
+            sim = setup_sim(paras, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
+            depr, heal, deprhigh, healhigh, deprmiddle, healmiddle, deprlow, heallow = run_sim(sim, paras, true, false, false)
+
+            push!(qual, evaluationrates(sim))
+        end
+        Plots.plot([qual], labels = "Qual: parents und h")
+
+    end
+    for i in eachindex(friends)
+        qual = Float64[]
+
+        for x in eachindex(h)
+            paras = Parameters(h = h[x], rate_friends= friends[i])
+
+            sim = setup_sim(paras, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
+            depr, heal, deprhigh, healhigh, deprmiddle, healmiddle, deprlow, heallow = run_sim(sim, paras, true, false, false)
+
+            push!(qual, evaluationrates(sim))
+        end
+        Plots.plot([qual], labels = "Qual h und friends")
+
+    end
+end
 
 
 #einfache Approximation an optimale Werte
@@ -91,6 +191,16 @@ mutable struct Paraqualityrates
 
     parameters::Parameters
     quality::Float64
+
+end
+Base.@kwdef mutable struct Optimalrates
+
+    prev::Float64 = 0.08
+    rate_parents::Float64 = 0.24
+    rate_friends::Float64=0.32
+    rate_ac::Float64=0.12
+    rate_spouse::Float64=0.32
+    rate_child::Float64=0.24
 
 end
 
@@ -111,7 +221,8 @@ function paraplusnorm(paras)
     return new_paras
 end
 
-function approximation_rates(steps, fdbck_education, fdbck_income, npoints=600) 
+#Achtung hier wird nicht mehr mit mehreren Seeds optimiert sondern Seed bleibt durch eval_rates_multipleseeds immer 0
+function approximation_rates(steps, ther_restriction, fdbck_education, fdbck_income, npoints=600) 
 
     pq_rates = Paraqualityrates[]
     quality_array = Float64[]
@@ -122,7 +233,7 @@ function approximation_rates(steps, fdbck_education, fdbck_income, npoints=600)
 	    print(".")
         new_paras = randpara()
 
-        qual_rates_new_paras = eval_rates_multipleseeds(0.08, 0.24, 0.32, 0.12, 0.32, 0.24, new_paras, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids, fdbck_education, fdbck_income)
+        qual_rates_new_paras = eval_rates_multipleseeds(new_paras, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids, ther_restriction, fdbck_education,fdbck_income)
 
         push!(pq_rates, Paraqualityrates(new_paras, qual_rates_new_paras))
     end
@@ -143,10 +254,10 @@ function approximation_rates(steps, fdbck_education, fdbck_income, npoints=600)
 
 
         for i=1:(npoints ÷ 2)
-            new_paras_rates = paraplusnorm(pq_rates[trunc(Int64, rand(truncated(Normal(0, npoints/6); lower = 1
+            new_paras_rates = paraplusnorm(pq_rates[trunc(Int64, rand(truncated(Normal(1, npoints/6); lower = 1, upper = npoints ÷ 2
             )))].parameters)
 
-            qual_rates_new_paras = eval_rates_multipleseeds(0.08, 0.24, 0.32, 0.12, 0.32, 0.24, new_paras_rates, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids, fdbck_education, fdbck_income)
+            qual_rates_new_paras = eval_rates_multipleseeds(new_paras_rates, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids, ther_restriction, fdbck_education,fdbck_income)
 
             push!(pq_rates, Paraqualityrates(new_paras_rates, qual_rates_new_paras))
         end
@@ -157,7 +268,7 @@ function approximation_rates(steps, fdbck_education, fdbck_income, npoints=600)
 
     sort!(pq_rates, by=p->p.quality)
 
-    present_optimalsolution_rates(pq_rates, fdbck_education, fdbck_income)
+    present_optimalsolution_rates(pq_rates, ther_restriction, fdbck_education, fdbck_income)
 
     return quality_array
 
@@ -169,12 +280,12 @@ function optimization_current_para(steps, fdbck_education, fdbck_income, npoints
     d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids = pre_setup()
 
     new_paras = Parameters()
-    qual_rates_new_paras = eval_rates_multipleseeds(0.08, 0.24, 0.32, 0.12, 0.32, 0.24, new_paras, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids, fdbck_education, fdbck_income)
+    qual_rates_new_paras = eval_rates_multipleseeds(new_paras, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids, ther_restriction, fdbck_education, fdbck_income)
     push!(pq_rates, Paraqualityrates(new_paras, qual_rates_new_paras))
 
     for i=2:npoints
         new_rand_paras = paraplusnorm(new_paras)
-        qual_rates_new_paras = eval_rates_multipleseeds(0.08, 0.24, 0.32, 0.12, 0.32, 0.24, new_paras, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids, fdbck_education, fdbck_income)
+        qual_rates_new_paras = eval_rates_multipleseeds(new_rand_paras, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids, ther_restriction, fdbck_education, fdbck_income)
         push!(pq_rates, Paraqualityrates(new_rand_paras, qual_rates_new_paras))
         print(".")
     end
@@ -194,10 +305,10 @@ function optimization_current_para(steps, fdbck_education, fdbck_income, npoints
 
 
         for i=1:(npoints ÷ 2)
-            new_paras_rates = paraplusnorm(pq_rates[trunc(Int64, rand(truncated(Normal(0, npoints/6); lower = 1
+            new_paras_rates = paraplusnorm(pq_rates[trunc(Int64, rand(truncated(Normal(0, npoints/6); lower = 1, upper = npoints ÷ 2
             )))].parameters)
 
-            qual_rates_new_paras = eval_rates_multipleseeds(0.08, 0.24, 0.32, 0.12, 0.32, 0.24, new_paras_rates, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids, fdbck_education, fdbck_income)
+            qual_rates_new_paras = eval_rates_multipleseeds(new_paras_rates, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids, ther_restriction, fdbck_education, fdbck_income)
 
             push!(pq_rates, Paraqualityrates(new_paras_rates, qual_rates_new_paras))
         end
@@ -208,7 +319,7 @@ function optimization_current_para(steps, fdbck_education, fdbck_income, npoints
 
     sort!(pq_rates, by=p->p.quality)
 
-    present_optimalsolution_rates(pq_rates, fdbck_education, fdbck_income)
+    present_optimalsolution_rates(pq_rates, ther_restriction, fdbck_education, fdbck_income)
 
     return quality_array
 
@@ -223,7 +334,7 @@ function approximation_rr(steps, fdbck_education, fdbck_income, npoints=600)
 	    print(".")
         new_paras = randpara()
 
-        qual_rr_new_paras = eval_rr_multipleseeds(2.5, 3.5, 1.2, 1.2, 1.5, new_paras, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids, fdbck_education, fdbck_income)
+        qual_rr_new_paras = eval_rr_multipleseeds(2.5, 3.5, 1.2, 1.2, 1.5, new_paras, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids, ther_restriction, fdbck_education, fdbck_income)
 
         push!(pq_rr, Paraqualityrr(new_paras, qual_rr_new_paras)) 
     end
@@ -246,7 +357,7 @@ function approximation_rr(steps, fdbck_education, fdbck_income, npoints=600)
             new_paras_rr = paraplusnorm(pq_rr[trunc(Int64, rand(truncated(Normal(0,100); lower = 1
             )))].parameters)
 
-            qual_rr_new_paras = eval_rr_multipleseeds(2.5, 3.5, 1.2, 1.2, 1.2, new_paras_rr, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids, fdbck_education, fdbck_income)
+            qual_rr_new_paras = eval_rr_multipleseeds(2.5, 3.5, 1.2, 1.2, 1.2, new_paras_rr, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids, ther_restriction, fdbck_education, fdbck_income)
 
             push!(pq_rr, Paraqualityrr(new_paras_rr, qual_rr_new_paras)) 
         end
@@ -256,36 +367,38 @@ function approximation_rr(steps, fdbck_education, fdbck_income, npoints=600)
 
     sort!(pq_rr, by=p->p.quality)
 
-    present_optimalsolution_rr(pq_rr, fdbck_education, fdbck_income)
+    present_optimalsolution_rr(pq_rr, ther_restriction, fdbck_education, fdbck_income)
 
     return quality_array
 
 end
 
-function present_optimalsolution_rates(pq_rates, fdbck_education, fdbck_income)
+function present_optimalsolution_rates(pq_rates, ther_restriction, fdbck_education, fdbck_income)
 
     for i=1:3
         d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids = pre_setup()
 
-        sim2= setup_sim(pq_rates[1].parameters, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
-        run_sim(sim2, 50, pq_rates[1].parameters, fdbck_education, fdbck_income)
+        sim= setup_sim(pq_rates[i].parameters, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
+        run_sim(sim, pq_rates[i].parameters, ther_restriction, fdbck_education, fdbck_income)
 
         println("die Parameter (rates) sind Folgende: ", pq_rates[i].parameters)
-        printpara!(sim2)
+        printpara!(sim)
     end
 end
 
-function quality_function_para(x, fdbck_education, fdbck_income)
+function quality_function_para(x, ther_restriction, fdbck_education, fdbck_income)
     d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids = pre_setup()
     parameter_field = collect(0.01:0.01:1)
     quality_array = Float64[]
     lowest =  1.0
     lowest_index = 0
+    
 
     if x == "parent"
         for i in eachindex(parameter_field)
+            println(i)
             para = Parameters(rate_parents=parameter_field[i])
-            qual = eval_rates_multipleseeds(0.08, 0.24, 0.32, 0.12, 0.32, 0.24, para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids, fdbck_education, fdbck_income)
+            qual = eval_rates_multipleseeds(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids, ther_restriction, fdbck_education, fdbck_income)
             if qual<lowest 
                 lowest_index = parameter_field[i]
                 lowest = qual
@@ -295,7 +408,7 @@ function quality_function_para(x, fdbck_education, fdbck_income)
     elseif x == "friends"
         for i in eachindex(parameter_field)
             para = Parameters(rate_friends=parameter_field[i])
-            qual = eval_rates_multipleseeds(0.08, 0.24, 0.32, 0.12, 0.32, 0.24, para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids, fdbck_education, fdbck_income)
+            qual = eval_rates_multipleseeds(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids, ther_restriction, fdbck_education, fdbck_income)
             if qual<lowest 
                 lowest_index = parameter_field[i]
                 lowest = qual
@@ -305,7 +418,7 @@ function quality_function_para(x, fdbck_education, fdbck_income)
     elseif x == "spouse"
         for i in eachindex(parameter_field)
             para = Parameters(rate_spouse=parameter_field[i])
-            qual = eval_rates_multipleseeds(0.08, 0.24, 0.32, 0.12, 0.32, 0.24, para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids, fdbck_education, fdbck_income)
+            qual = eval_rates_multipleseeds(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids, ther_restriction, fdbck_education, fdbck_income)
             if qual<lowest 
                 lowest_index = parameter_field[i]
                 lowest = qual
@@ -315,7 +428,7 @@ function quality_function_para(x, fdbck_education, fdbck_income)
     elseif x == "child"
         for i in eachindex(parameter_field)
             para = Parameters(rate_child=parameter_field[i])
-            qual = eval_rates_multipleseeds(0.08, 0.24, 0.32, 0.12, 0.32, 0.24, para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids, fdbck_education, fdbck_income)
+            qual = eval_rates_multipleseeds(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids, ther_restriction, fdbck_education, fdbck_income)
             if qual<lowest 
                 lowest_index = parameter_field[i]
                 lowest = qual
@@ -325,7 +438,7 @@ function quality_function_para(x, fdbck_education, fdbck_income)
     elseif x == "ac"
         for i in eachindex(parameter_field)
             para = Parameters(rate_ac=parameter_field[i])
-            qual = eval_rates_multipleseeds(0.08, 0.24, 0.32, 0.12, 0.32, 0.24, para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids, fdbck_education, fdbck_income)
+            qual = eval_rates_multipleseeds(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids, ther_restriction, fdbck_education, fdbck_income)
             if qual<lowest 
                 lowest_index = parameter_field[i]
                 lowest = qual
@@ -335,7 +448,7 @@ function quality_function_para(x, fdbck_education, fdbck_income)
     elseif x == "prev"
         for i in eachindex(parameter_field)
             para = Parameters(prev=parameter_field[i])
-            qual = eval_rates_multipleseeds(0.08, 0.24, 0.32, 0.12, 0.32, 0.24, para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids, fdbck_education, fdbck_income)
+            qual = eval_rates_multipleseeds(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids, ther_restriction, fdbck_education, fdbck_income)
             if qual<lowest 
                 lowest_index = parameter_field[i]
                 lowest = qual
@@ -345,7 +458,7 @@ function quality_function_para(x, fdbck_education, fdbck_income)
     elseif x == "h"
         for i in eachindex(parameter_field)
             para = Parameters(h=parameter_field[i])
-            qual = eval_rates_multipleseeds(0.08, 0.24, 0.32, 0.12, 0.32, 0.24, para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids, fdbck_education, fdbck_income)
+            qual = eval_rates_multipleseeds(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids, ther_restriction, fdbck_education, fdbck_income)
             if qual<lowest 
                 lowest_index = parameter_field[i]
                 lowest = qual
@@ -357,16 +470,45 @@ function quality_function_para(x, fdbck_education, fdbck_income)
     return quality_array, parameter_field, lowest_index
 end
 
-function present_optimalsolution_rr(pq_rr, fdbck_education, fdbck_income)
+function present_optimalsolution_rr(pq_rr, ther_restriction, fdbck_education, fdbck_income)
 
     for i=1:3
         d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids = pre_setup()
         sim = setup_sim(pq_rr[i].parameters,d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
-        run_sim(sim, 50, pq_rr[i].parameters, fdbck_education, fdbck_income)
+        run_sim(sim, pq_rr[i].parameters, ther_restriction, fdbck_education, fdbck_income)
 
         println("die Parameter (RR) sind Folgende: ", pq_rr[i].parameters)
         printpara!(sim)
     end
+end
+function params_with_multipleseeds(ther_restriction, fdbck_education, fdbck_income)
+
+    qual_array = Float64[]
+    rand_qual_array = Float64[]
+    
+    for i = 0:20
+        para = Parameters(seed = i)
+
+        d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids = pre_setup()
+        sim = setup_sim(para,d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
+        run_sim(sim, para, ther_restriction, fdbck_education, fdbck_income)
+
+        qual = evaluationrates(sim)
+        push!(qual_array, qual)
+
+    end
+    for i = 0:20
+        rand_para = randpara()
+        rand_para.seed = i
+
+        d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids = pre_setup()
+        sim = setup_sim(rand_para,d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
+        run_sim(sim, rand_para, ther_restriction, fdbck_education, fdbck_income)
+
+        qual = evaluationrates(sim)
+        push!(rand_qual_array, qual)
+    end
+    return qual_array, rand_qual_array
 end
 function printpara!(sim)
     rr_par, rr_fr, rr_ac, rr_sp, rr_ch = toriskratio(sim)

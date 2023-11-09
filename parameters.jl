@@ -2,28 +2,28 @@
 
 Base.@kwdef mutable struct Parameters
 
-    prev::Float64 = 0.48
+    prev::Float64 = 0.4563
     rem::Float64 = 0.51
     rem_ther::Float64 = 0.45
     avail_high::Float64 = 0.5
     avail_middle::Float64 = 0.2
     avail_low::Float64 = 0.1
-    rate_parents::Float64 = 0.8
-    rate_friends::Float64 = 0.76
-    rate_ac::Float64 = 0.16
-    rate_child::Float64 = 0.94
-    rate_spouse::Float64 = 0.91
+    rate_parents::Float64= 0.1965
+    rate_friends::Float64 = 0.1154
+    rate_ac::Float64 = 0.02066
+    rate_child::Float64 = 0.04931
+    rate_spouse::Float64 = 0.6591
     n::Int64 = 1000
     n_fam::Int64 = 300
     p_ac::Float64 = 15
     p_fr::Float64 = 7
-    seed::Int64 = 27
+    seed::Int64 = 0
 
     #Breite der Verteilung der susceptibility
     b::Float64 = 0.1
 
     #Heritabilitätsindex(?)
-    h::Float64 = 0.09
+    h::Float64 = 0.64182
 
     #Wahrscheinlichkeiten für unterschiedliche Anzahl von Kindern
     p_none::Float64 = 0.18
