@@ -634,7 +634,7 @@ end
 function  setup_sim(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
     # for reproducibility
     if para.seed > 0
-        Random.seed!(para.seed)
+	    Random.seed!(para.seed)
     end
 
     # create a population of agents, fully mixed
