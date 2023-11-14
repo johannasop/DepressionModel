@@ -273,7 +273,7 @@ function approximation_rates(steps, ther_restriction, fdbck_education, fdbck_inc
     return quality_array
 
 end
-function optimization_current_para(steps, fdbck_education, fdbck_income, npoints=600)
+function optimization_current_para(steps, ther_restriction, fdbck_education, fdbck_income, npoints=600)
     pq_rates = Paraqualityrates[]
     quality_array = Float64[]
 

@@ -947,8 +947,8 @@ end
 #qual = approximation_rates(50, true, true, true) 
 #Plots.plot([qual], labels=["mittlere Abweichung"]) 
 
-#qual= optimization_current_para(50, false, false)
-#Plots.plot([qual], labels=["mittlere Abweichung"]) 
+qual= optimization_current_para(50, true, false, false)
+Plots.plot([qual], labels=["mittlere Abweichung"]) 
 
 
 #hier kann sich ein Graph ausgegeben werden, bei dem geschaut wird, wie sich die Qualität der Simulation über den Bereich des Parameters entwickelt
@@ -957,7 +957,7 @@ end
 #qual_h, parameter_field= quality_function_para("h", true, true)
 #Plots.plot([qual_h], labels = ["mA h"], x = [parameter_field])
 
-standard!(true, false, false)
+#standard!(true, false, false)
 
 #sensi!()
 #qual_sensi!()
