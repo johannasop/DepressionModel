@@ -1,4 +1,14 @@
 
+Base.@kwdef mutable struct Optimalrates
+
+    prev::Float64 = 0.08
+    rate_parents::Float64 = 0.24
+    rate_friends::Float64=0.32
+    rate_ac::Float64=0.12
+    rate_spouse::Float64=0.32
+    rate_child::Float64=0.24
+
+end
 
 function evaluationrr(sim, data_rr_par, data_rr_fr, data_rr_ac, data_rr_sp, data_rr_ch)
     #Evaluation der Risk Ratios
@@ -62,8 +72,7 @@ function sensi!()
 
     df= DataFrame([name => [] for name in nodenames], makeunique = true)
     placeholder = Vector{Float64}(undef, 0)
-    cl = 1
-    cn = 1
+    
 
     for f in parameters_fr
         for p in parameters_par
@@ -81,101 +90,46 @@ function sensi!()
 
 end
 
-function qual_sensi!()
+function qual_sensi()
     d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids = pre_setup()
 
     parents = [0.0, 0.02, 0.05, 0.1, 0.3, 0.5]
     friends = [0.0, 0.02, 0.05, 0.1, 0.3, 0.5]
     h = [0.0, 0.02, 0.05, 0.1, 0.3, 0.5]
+    nodenames = ["0.0", "0.02", "0.05", "0.1", "0.3", "0.5"]
 
+    df= DataFrame(par = [], fr = [], her = [], qual = [])
+    
     for i in eachindex(parents)
-        qual_par_fr = Float64[]
-
-        println("parents: ", parents[i])
         for x in eachindex(friends)
 
-            paras = Parameters(rate_parents = parents[i], rate_friends= friends[x])
+            paras = Parameters(rate_parents = parents[i], rate_friends= friends[x], h = 0)
 
             sim = setup_sim(paras, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
             depr, heal, deprhigh, healhigh, deprmiddle, healmiddle, deprlow, heallow = run_sim(sim, paras, true, false, false)
-
-            push!(qual, evaluationrates(sim))
+            push!(df, [parents[i] friends[x] 0.0 evaluationrates(sim)])        
         end
-        Plots.plot([qual], labels = "Qual: parents und friends")
-
     end
     for i in eachindex(parents)
-        qual = Float64[]
-
         for x in eachindex(h)
-            paras = Parameters(rate_parents = parents[i], h= h[x])
+            paras = Parameters(rate_parents = parents[i], h= h[x], rate_friends = 0)
 
             sim = setup_sim(paras, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
             depr, heal, deprhigh, healhigh, deprmiddle, healmiddle, deprlow, heallow = run_sim(sim, paras, true, false, false)
-
-            push!(qual, evaluationrates(sim))
+            push!(df, [parents[i] 0.0 h[x] evaluationrates(sim)])    
         end
-        Plots.plot([qual], labels = "Qual: parents und h")
-
     end
     for i in eachindex(h)
-        qual = Float64[]
-
         for x in eachindex(friends)
-            paras = Parameters(h = h[i], rate_friends= friends[x])
+            paras = Parameters(h = h[i], rate_friends= friends[x], rate_parents = 0)
 
             sim = setup_sim(paras, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
             depr, heal, deprhigh, healhigh, deprmiddle, healmiddle, deprlow, heallow = run_sim(sim, paras, true, false, false)
-
-            push!(qual, evaluationrates(sim))
+            push!(df, [0.0 friends[x] h[i] evaluationrates(sim)])    
         end
-        Plots.plot([qual], labels = "Qual h und friends")
-
     end
-
-    #hier dann nochmal mit umgekehrten Achsen
-    for i in eachindex(friends)
-        qual = Float64[]
-
-        for x in eachindex(parents)
-            paras = Parameters(rate_parents = parents[x], rate_friends= friends[i])
-
-            sim = setup_sim(paras, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
-            depr, heal, deprhigh, healhigh, deprmiddle, healmiddle, deprlow, heallow = run_sim(sim, paras, true, false, false)
-
-            push!(qual, evaluationrates(sim))
-        end
-        Plots.plot([qual], labels = "Qual: parents und friends")
-
-    end
-    for i in eachindex(h)
-        qual = Float64[]
-
-        for x in eachindex(parents)
-            paras = Parameters(rate_parents = parents[x], h= h[i])
-
-            sim = setup_sim(paras, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
-            depr, heal, deprhigh, healhigh, deprmiddle, healmiddle, deprlow, heallow = run_sim(sim, paras, true, false, false)
-
-            push!(qual, evaluationrates(sim))
-        end
-        Plots.plot([qual], labels = "Qual: parents und h")
-
-    end
-    for i in eachindex(friends)
-        qual = Float64[]
-
-        for x in eachindex(h)
-            paras = Parameters(h = h[x], rate_friends= friends[i])
-
-            sim = setup_sim(paras, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
-            depr, heal, deprhigh, healhigh, deprmiddle, healmiddle, deprlow, heallow = run_sim(sim, paras, true, false, false)
-
-            push!(qual, evaluationrates(sim))
-        end
-        Plots.plot([qual], labels = "Qual h und friends")
-
-    end
+    println("Sensi fertig")
+    return df 
 end
 
 
@@ -193,16 +147,7 @@ mutable struct Paraqualityrates
     quality::Float64
 
 end
-Base.@kwdef mutable struct Optimalrates
 
-    prev::Float64 = 0.08
-    rate_parents::Float64 = 0.24
-    rate_friends::Float64=0.32
-    rate_ac::Float64=0.12
-    rate_spouse::Float64=0.32
-    rate_child::Float64=0.24
-
-end
 
 function randpara()
 

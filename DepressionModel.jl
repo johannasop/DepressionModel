@@ -6,6 +6,7 @@ using CSV
 using DataFrames
 using MiniObserve
 using Statistics
+using AlgebraOfGraphics
 
 include("parameters.jl") 
 include("analytics.jl")
@@ -944,11 +945,11 @@ function quality_plots!(fdbck_education, fdbck_income)
     #println("lowest h ", lowh)
 end
 
-#qual = approximation_rates(50, true, true, true) 
+#qual = approximation_rates(50, true, true, false) 
 #Plots.plot([qual], labels=["mittlere Abweichung"]) 
 
-qual= optimization_current_para(50, true, false, false)
-Plots.plot([qual], labels=["mittlere Abweichung"]) 
+#qual= optimization_current_para(50, true, false, false)
+#Plots.plot([qual], labels=["mittlere Abweichung"]) 
 
 
 #hier kann sich ein Graph ausgegeben werden, bei dem geschaut wird, wie sich die Qualität der Simulation über den Bereich des Parameters entwickelt
@@ -960,7 +961,13 @@ Plots.plot([qual], labels=["mittlere Abweichung"])
 #standard!(true, false, false)
 
 #sensi!()
-#qual_sensi!()
+df = qual_sensi()
+
+
+df_par_fr = data(df) * mapping(:par, :fr)
+axis = (type = Axis3, width = 300, height = 300)
+plt = df_par_fr * linear() * mapping(qual)
+draw(plt; axis = axis)
 
 #comparison_feedback!(false)
 
