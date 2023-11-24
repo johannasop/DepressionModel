@@ -262,3 +262,186 @@ function toriskratio(sim)
 
     return rr_par, rr_fr, rr_ac, rr_sp, rr_ch
 end
+
+#diverse Funktionen zur Auswertung verschiedenster Aspekte des Modells
+
+function quality_plots!(fdbck_education, fdbck_income)
+    qual_parent, parameter_field, lowpar = quality_function_para("parent")
+    qual_friends, parameter_field, lowfr= quality_function_para("friends")
+    qual_spouse, parameter_field, lowsp = quality_function_para("spouse")
+    qual_child, parameter_field, lowch= quality_function_para("child")
+    qual_ac, parameter_field, lowac = quality_function_para("ac")
+    qual_prev, parameter_field, lowprev = quality_function_para("prev")
+    qual_h, parameter_field, lowh = quality_function_para("h")
+
+    Plots.plot([qual_parent, qual_friends, qual_spouse, qual_child, qual_ac, qual_prev, qual_h], labels = ["mA Eltern" "mA Freunde" "mA spouse" "mA Kind" "mA ac" "mA prev" "mA h"], x = [parameter_field])
+    
+    #println("lowest parent ", lowpar)
+    #println("lowest friends ", lowfr)
+    #println("lowest spouse ", lowsp)
+    #println("lowest child ", lowch)
+    #println("lowest ac ", lowac)
+    #println("lowest prev ", lowprev)
+    #println("lowest h ", lowh)
+end
+
+function feedback_analytics(sim)
+
+    avg_d = 0.0
+    d_count = 0.0
+    avg_h = 0.0
+    h_count = 0.0
+ 
+    for person in sim.pop
+         if person.state == depressed
+             d_count += 1
+             avg_d += person.income
+         elseif person.state == healthy
+             h_count +=1
+             avg_h += person.income
+         end
+    end
+ 
+    return (avg_d/d_count), (avg_h/h_count)
+ end
+
+function educationlevels(sim)
+    counterone = count(p->p.education==1, sim.pop)
+    countertwo = count(p->p.education==2, sim.pop)
+    counterthree = count(p->p.education == 3, sim.pop)
+    counterfour = count(p->p.education == 4, sim.pop)
+
+    return counterone, countertwo, counterthree, counterfour
+end
+
+function comparison_feedback!(ther_restriction)
+    #alle Feedbackeffekte aus
+    d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids = pre_setup()
+    para = Parameters(ther_restriction = ther_restriction, fdbck_education = false, fdbck_income = false)
+    sim = setup_sim(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kid)
+    depr, heal, deprhigh, healhigh, deprmiddle, healmiddle, deprlow, heallow, array_depr_none, array_health_none, c1, c2, c3, c4 = run_sim(sim, para)
+    printpara!(sim)
+    c1, c2, c3, c4 = educationlevels(sim)
+    println("Level 1: ", c1, " Davon depressiv: ", count(p -> p.state == depressed && p.education == 1, sim.pop), " Prozentual: ", count(p -> p.state == depressed && p.education == 1, sim.pop)/c1*100)
+    println("Level 2: ", c2, " Davon depressiv: ", count(p -> p.state == depressed && p.education == 2, sim.pop), " Prozentual: ", count(p -> p.state == depressed && p.education == 2, sim.pop)/c2*100)
+    println("Level 3: ", c3, " Davon depressiv: ", count(p -> p.state == depressed && p.education == 3, sim.pop), " Prozentual: ", count(p -> p.state == depressed && p.education == 3, sim.pop)/c3*100)
+    println("Level 4: ", c4, " Davon depressiv: ", count(p -> p.state == depressed && p.education == 4, sim.pop), " Prozentual: ", count(p -> p.state == depressed && p.education == 4, sim.pop)/c4*100)
+
+
+    qual_rates_currentsolution = eval_rates_multipleseeds(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
+    println("Qualität der aktuellen Lösung: keine Feedbackeffekte ", qual_rates_currentsolution)
+    
+
+    #Bildungsfeedbackeffekt an
+    d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids = pre_setup()
+    para = Parameters(ther_restriction = ther_restriction, fdbck_education = true, fdbck_income = false)
+    sim = setup_sim(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
+    depr, heal, deprhigh, healhigh, deprmiddle, healmiddle, deprlow, heallow, array_depr_edu, array_health_edu, c1, c2, c3, c4 = run_sim(sim, para)
+    printpara!(sim)  
+    c1, c2, c3, c4 = educationlevels(sim)
+    println("Level 1: ", c1, " Davon depressiv: ", count(p -> p.state == depressed && p.education == 1, sim.pop), " Prozentual: ", count(p -> p.state == depressed && p.education == 1, sim.pop)/c1*100)
+    println("Level 2: ", c2, " Davon depressiv: ", count(p -> p.state == depressed && p.education == 2, sim.pop), " Prozentual: ", count(p -> p.state == depressed && p.education == 2, sim.pop)/c2*100)
+    println("Level 3: ", c3, " Davon depressiv: ", count(p -> p.state == depressed && p.education == 3, sim.pop), " Prozentual: ", count(p -> p.state == depressed && p.education == 3, sim.pop)/c3*100)
+    println("Level 4: ", c4, " Davon depressiv: ", count(p -> p.state == depressed && p.education == 4, sim.pop), " Prozentual: ", count(p -> p.state == depressed && p.education == 4, sim.pop)/c4*100)
+
+
+    qual_rates_currentsolution = eval_rates_multipleseeds(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
+    println("Qualität der aktuellen Lösung: Bildungseffekt an ", qual_rates_currentsolution)
+    
+
+    #Einkommen-Depressionsfeedbackeffekt an
+    d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids = pre_setup()
+    para = Parameters(ther_restriction = ther_restriction, fdbck_education = false, fdbck_income = true)
+    sim = setup_sim(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
+    depr, heal, deprhigh, healhigh, deprmiddle, healmiddle, deprlow, heallow, array_depr_inc, array_health_inc, c1, c2, c3, c4 = run_sim(sim, para)
+    printpara!(sim) 
+    c1, c2, c3, c4 = educationlevels(sim)
+    println("Level 1: ", c1, " Davon depressiv: ", count(p -> p.state == depressed && p.education == 1, sim.pop), " Prozentual: ", count(p -> p.state == depressed && p.education == 1, sim.pop)/c1*100)
+    println("Level 2: ", c2, " Davon depressiv: ", count(p -> p.state == depressed && p.education == 2, sim.pop), " Prozentual: ", count(p -> p.state == depressed && p.education == 2, sim.pop)/c2*100)
+    println("Level 3: ", c3, " Davon depressiv: ", count(p -> p.state == depressed && p.education == 3, sim.pop), " Prozentual: ", count(p -> p.state == depressed && p.education == 3, sim.pop)/c3*100)
+    println("Level 4: ", c4, " Davon depressiv: ", count(p -> p.state == depressed && p.education == 4, sim.pop), " Prozentual: ", count(p -> p.state == depressed && p.education == 4, sim.pop)/c4*100)
+
+
+    qual_rates_currentsolution = eval_rates_multipleseeds(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
+    println("Qualität der aktuellen Lösung: Einkommenseffekt an ", qual_rates_currentsolution)
+    
+
+    #beide Feedbackeffekte an
+    d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids = pre_setup()
+    para = Parameters(ther_restriction = ther_restriction, fdbck_education = true, fdbck_income = true)
+    sim = setup_sim(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
+    depr, heal, deprhigh, healhigh, deprmiddle, healmiddle, deprlow, heallow, array_depr_both, array_health_both, c1, c2, c3, c4 = run_sim(sim, para)
+    printpara!(sim)  
+    c1, c2, c3, c4 = educationlevels(sim)
+    println("Level 1: ", c1, " Davon depressiv: ", count(p -> p.state == depressed && p.education == 1, sim.pop), " Prozentual: ", count(p -> p.state == depressed && p.education == 1, sim.pop)/c1 *100)
+    println("Level 2: ", c2, " Davon depressiv: ", count(p -> p.state == depressed && p.education == 2, sim.pop), " Prozentual: ", count(p -> p.state == depressed && p.education == 2, sim.pop)/c2 *100)
+    println("Level 3: ", c3, " Davon depressiv: ", count(p -> p.state == depressed && p.education == 3, sim.pop), " Prozentual: ", count(p -> p.state == depressed && p.education == 3, sim.pop)/c3 *100)
+    println("Level 4: ", c4, " Davon depressiv: ", count(p -> p.state == depressed && p.education == 4, sim.pop), " Prozentual: ", count(p -> p.state == depressed && p.education == 4, sim.pop)/c4 *100)
+
+
+    qual_rates_currentsolution = eval_rates_multipleseeds(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids) 
+    println("Qualität der aktuellen Lösung: beide Feedbackeffekte an ", qual_rates_currentsolution)
+    
+
+
+    Plots.plot([array_depr_none, array_health_none, array_depr_edu, array_health_edu, array_depr_inc, array_health_inc, array_depr_both, array_health_both], labels = ["depressed: none" "healthy: none" "depressed: edu" "healthy: edu" "depressed: inc" "healthy: inc" "depressed: both" "healthy: both"])
+
+    #Plots.plot([array_depr_none, array_health_none], labels = ["depressed: none" "healthy: none"])
+    #Plots.plot([array_depr_edu, array_health_edu], labels = ["depressed: edu" "healthy: edu" ])
+    #Plots.plot([array_depr_inc, array_health_inc], labels = [ "depressed: inc" "healthy: inc" ])
+    #Plots.plot([array_depr_both, array_health_both], labels = [ "depressed: both" "healthy: both"])
+
+end
+
+
+function print_n!(sim)
+    avg_n_friends = 0
+    avg_n_ac = 0
+    avg_n_parents = 0
+    avg_n_children = 0
+    c = 0
+    avg_n_nokids = 0
+    avg_n_nokidsold = 0
+    avg_n_spouse = 0
+    ages = []
+
+
+    println("n depressed: ",count(p->p.state==depressed, sim.pop))
+    println("n healthy: ",count(p->p.state==healthy, sim.pop))
+
+    for person in sim.pop 
+        avg_n_friends += length(person.friends)
+        avg_n_ac += length(person.ac)
+
+        if length(person.parents)>0
+            avg_n_parents += 1
+        end
+
+        if length(person.children) > 0
+            avg_n_children += length(person.children)
+            c +=1
+        elseif person.age >= 50
+            avg_n_nokidsold += 1
+            avg_n_nokids += 1
+        else
+            avg_n_nokids += 1
+        end
+
+        if length(person.spouse) > 0
+            avg_n_spouse += 1
+        end
+
+        push!(ages, person.age)
+    end
+
+    println("avg n friends: ", avg_n_friends/length(sim.pop))
+    println("avg n ac: ", avg_n_ac/length(sim.pop))
+    println("n parents: ", avg_n_parents/length(sim.pop)*100, " %")
+    println("avg n children: ", avg_n_children/c)
+    println("avg n nokids: ", avg_n_nokids/length(sim.pop)*100, " %")
+    println("avg n nokids älter: ", avg_n_nokidsold/count(p->p.age>=50, sim.pop)*100, " %")
+    println("avg n spouse: ", avg_n_spouse/length(sim.pop)*100, " %")
+    
+    #sort!(ages)
+    #hier wäre ein frquency-Plot noch schön für die Altersverteilung
+end

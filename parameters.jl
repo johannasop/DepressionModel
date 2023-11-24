@@ -2,17 +2,17 @@
 
 Base.@kwdef mutable struct Parameters
 
-    prev::Float64 = 0.4563
+    prev::Float64 = 0.8509
     rem::Float64 = 0.51
     rem_ther::Float64 = 0.45
     avail_high::Float64 = 0.5
     avail_middle::Float64 = 0.2
     avail_low::Float64 = 0.1
-    rate_parents::Float64= 0.1965
-    rate_friends::Float64 = 0.1154
-    rate_ac::Float64 = 0.02066
-    rate_child::Float64 = 0.04931
-    rate_spouse::Float64 = 0.6591
+    rate_parents::Float64= 0.04386
+    rate_friends::Float64 = 0.216716
+    rate_ac::Float64 = 0.01044
+    rate_child::Float64 = 0.05084
+    rate_spouse::Float64 = 0.115645
     n::Int64 = 1000
     n_fam::Int64 = 300
     p_ac::Float64 = 15
@@ -23,7 +23,7 @@ Base.@kwdef mutable struct Parameters
     b::Float64 = 0.1
 
     #Heritabilitätsindex(?)
-    h::Float64 = 0.64182
+    h::Float64 = 0.727
 
     #Wahrscheinlichkeiten für unterschiedliche Anzahl von Kindern
     p_none::Float64 = 0.18
@@ -42,5 +42,10 @@ Base.@kwdef mutable struct Parameters
     depressiondropout::Float64 = 0.05
     depression_jobloss::Float64 = 0.05
     better_edu_thanparents::Float64 = 0.02
+
+    #Welcher Feedbackeffekt aktiviert wird
+    ther_restriction :: Bool = true
+    fdbck_education :: Bool = false
+    fdbck_income :: Bool = false
 
 end

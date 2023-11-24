@@ -7,6 +7,9 @@ using DataFrames
 using MiniObserve
 using Statistics
 using AlgebraOfGraphics
+using CairoMakie
+using LIBSVM
+using Makie
 
 include("parameters.jl") 
 include("analytics.jl")
@@ -68,9 +71,9 @@ mutable struct Simulation{AGENT}
     time::Int64
 end
 
-function update!(person, sim, para, ther_restriction, fdbck_education, fdbck_income_depression)
+function update!(person, sim, para)
  
-    death = population_update(person, sim, para, fdbck_education, fdbck_income_depression)
+    death = population_update(person, sim, para)
 
     #Person sollte dann auch niemanden mehr anstecken können
     if death
@@ -90,7 +93,13 @@ function update!(person, sim, para, ther_restriction, fdbck_education, fdbck_inc
     if (findfirst(p-> p.state == depressed, person.friends) !== nothing)
         percentage = count(p -> p.state == depressed, person.friends)/length(person.friends)
 
-        rate += para.rate_friends * percentage
+        # if percentage > 0.3
+        #     rate += 0.1
+        # end
+        # if percentage > 0.4
+        #     rate += 0.15
+        # end
+        rate += para.rate_friends 
     end
 
     if (findfirst(p-> p.state == depressed, person.ac) !== nothing)
@@ -113,12 +122,15 @@ function update!(person, sim, para, ther_restriction, fdbck_education, fdbck_inc
     #Spontanremmisionen 
     if rand() < ratetoprob(para.rem) && person.state == depressed 
         person.state = healthy
+        setprobther!(person, para)
     end
 
-    therapy!(ther_restriction, person, para)
+    if person.state == depressed
+        therapy!(person, para)
+    end
 end
 
-function population_update(person, sim, para, fdbck_education, fdbck_income_depression)
+function population_update(person, sim, para)
 
     person.age += 1
 
@@ -178,12 +190,17 @@ function population_update(person, sim, para, fdbck_education, fdbck_income_depr
 
     #Wenn Personen in diesen Altersklassen Depressionen entwickeln, kann es sein, dass sie den "erwarteten" Bildungsstand nicht erreichen; dieser Feedbackeffekt lässt sich ausschalten
 
-    if fdbck_education
+    if para.fdbck_education
         if person.age >= 18 && person.age <= 25 && person.state == depressed && person.education > 1
             if rand() < para.depressiondropout
                 person.education = person.education - 1
             end
         end
+    end
+
+    #Wahrscheinlichkeit sich in Therapie zu begeben in Abhängigkeit des SÖS
+    if person.age == 18
+        setprobther!(person, para) 
     end
 
     #Einstieg ins Berufsleben
@@ -193,7 +210,7 @@ function population_update(person, sim, para, fdbck_education, fdbck_income_depr
 
     #Falls Depressionen im Erwachsenenalter auftreten, kann Job verloren gehen und dann verschlechtert sich finanzielle Situation
     #Feedbackeffekt Einkommensverlust bei Depressionen lässt sich ausschalten
-    if fdbck_income_depression
+    if para.fdbck_income
         if person.age > 25 && person.state == depressed && person.income >= 10
             if rand() < para.depression_jobloss
                 person.income = person.income - 10
@@ -202,7 +219,7 @@ function population_update(person, sim, para, fdbck_education, fdbck_income_depr
     end
 
     return false
-    end
+ end
 function newkid!(sim, para)
 
     if length(sim.pop_potentialparents) == 0
@@ -243,23 +260,18 @@ function newkid!(sim, para)
     end
 
     #werden Eltern gelöscht oder bleiben auf der Liste potentieller Eltern? Außerdem können sie mehr als drei Kinder kriegen
+    p = 0.0
     if length(parent.children) > 3 
-
-        if  rand() < (para.p_kids[3])
-            sim.pop_potentialparents[i] = last(sim.pop_potentialparents)
-            pop!(sim.pop_potentialparents)
-            x = findfirst(x->x==parent.spouse[1], sim.pop_potentialparents)
-            sim.pop_potentialparents[x] = last(sim.pop_potentialparents)
-            pop!(sim.pop_potentialparents)
-        end 
-
-    elseif rand() < para.p_kids[length(parent.children)] 
-        sim.pop_potentialparents[i] = last(sim.pop_potentialparents)
-        pop!(sim.pop_potentialparents)
-        x = findfirst(x->x==parent.spouse[1], sim.pop_potentialparents)
-        sim.pop_potentialparents[x] = last(sim.pop_potentialparents)
-        pop!(sim.pop_potentialparents)
+        p = para.p_kids[3]
+    else
+        p = para.p_kids[length(parent.children)]
     end
+
+    if rand() < p
+        delete!(parent, sim.pop_potentialparents)
+        delete!(parent.spouse[1], sim.pop_potentialparents)
+    end
+        
 
     push!(sim.pop, newkid)
 
@@ -272,37 +284,30 @@ function death(person, sim)
         push!(sim.pop_singles, person.spouse[1])
         
         if person in sim.pop_potentialparents
-            sim.pop_potentialparents[findfirst(x->x==person.spouse[1], sim.pop_potentialparents)] = last(sim.pop_potentialparents)
-            pop!(sim.pop_potentialparents)
-            sim.pop_potentialparents[findfirst(x->x==person, sim.pop_potentialparents)] = last(sim.pop_potentialparents)
-            pop!(sim.pop_potentialparents)
+            delete!(person.spouse[1], sim.pop_potentialparents)
+            delete!(person, sim.pop_potentialparents)
         end
 
         pop!(person.spouse[1].spouse)
     else
-        sim.pop_singles[findfirst(x->x==person, sim.pop_singles)] = last(sim.pop_singles)
-        pop!(sim.pop_singles)
+        delete!(person, sim.pop_singles)
     end
 
     #Person muss noch von Listen aller ihr bekannten und befreundeten Personen gelöscht werden, denn hier kann kein Kontakt mehr bestehen
     if length(person.friends)>0
         for i=1:length(person.friends)
-            person.friends[i].friends[findfirst(x->x==person, person.friends[i].friends)] = last(person.friends[i].friends)
-            pop!(person.friends[i].friends)
+            delete!(person, person.friends[i].friends)
         end
     end
     if length(person.ac)>0
         for i in eachindex(person.ac)
-            person.ac[i].ac[findfirst(x->x==person, person.ac[i].ac)] = last(person.ac[i].ac)
-            pop!(person.ac[i].ac)        
+            delete!(person, person.ac[i].ac)     
         end
     end
 
 
     #Mensch aus Population entfernen
-    sim.pop[findfirst(x->x==person, sim.pop)] = last(sim.pop)
-    pop!(sim.pop)
-
+    delete!(person, sim.pop)
     return true
 end
 
@@ -338,26 +343,20 @@ function newpartner!(person, sim, para)
             push!(person.spouse, potpartner)
             push!(potpartner.spouse, person)
 
-            sim.pop_singles[findfirst(x->x==person, sim.pop_singles)] = last(sim.pop_singles)
-            pop!(sim.pop_singles)
-            sim.pop_singles[findfirst(x->x==potpartner, sim.pop_singles)] = last(sim.pop_singles)
-            pop!(sim.pop_singles)
+            delete!(person, sim.pop_singles)
+            delete!(potpartner, sim.pop_singles)
 
             #sind nun keine Bekannten oder Freunde mehr
             if person in potpartner.friends
-                person.friends[findfirst(x->x==potpartner, person.friends)] = last(person.friends)
-                pop!(person.friends) 
-                potpartner.friends[findfirst(x->x==person, potpartner.friends)] = last(potpartner.friends)
-                pop!(potpartner.friends) 
+                delete!(potpartner, person.friends)
+                delete!(person, potpartner.friends) 
                 if person in potpartner.friends
                     println("spouse still in friends")
                 end 
             end
             if person in potpartner.ac
-                person.ac[findfirst(x->x==potpartner, person.ac)] = last(person.ac)
-                pop!(person.ac) 
-                potpartner.ac[findfirst(x->x==person, potpartner.ac)] = last(potpartner.ac)
-                pop!(potpartner.ac) 
+                delete!(potpartner, person.ac)
+                delete!(person, potpartner.ac)
                 if person in potpartner.ac
                     println("spouse still in ac")
                 end
@@ -388,10 +387,8 @@ function splitup!(person, sim)
     push!(sim.pop_singles, person.spouse[1])
 
     if person in sim.pop_potentialparents
-        sim.pop_potentialparents[findfirst(x->x==person, sim.pop_potentialparents)] = last(sim.pop_potentialparents)
-        pop!(sim.pop_potentialparents)
-        sim.pop_potentialparents[findfirst(x->x==person.spouse[1], sim.pop_potentialparents)] = last(sim.pop_potentialparents)
-        pop!(sim.pop_potentialparents)
+        delete!(person, sim.pop_potentialparents)
+        delete!(person.spouse[1], sim.pop_potentialparents)
     end
    
     
@@ -415,24 +412,25 @@ function calculateincome!(person, para)
         
 end
 
-function therapy!(ther_restriction, person, para)
+function setprobther!(person, para)
 
     #Wahrscheinlichkeit sich in Therapie zu begeben in Abhängigkeit des SÖS
-    if ther_restriction
-        if person.age >= 18
-            if person.income >= 75
-                person.prob_ther = para.avail_high
-            elseif person.income >= 25
-                person.prob_ther = para.avail_middle
-            else
-                person.prob_ther = para.avail_low
-            end
+    if para.ther_restriction
+        if person.education == 4
+            person.prob_ther = para.avail_high
+        elseif person.education >= 2
+            person.prob_ther = para.avail_middle
+        else
+            person.prob_ther = para.avail_low
         end
     else
         person.prob_ther = 1
     end
-    
-    #+Annahme, dass Therapiemotivation mit weniger Erfolg sinkt
+
+end
+function therapy!(person, para)
+
+    #Annahme, dass Therapiemotivation mit weniger Erfolg sinkt
     if rand() < person.prob_ther && rand() < ratetoprob(para.rem_ther)
         person.state = healthy
     elseif (person.prob_ther - 0.1) > 0
@@ -442,10 +440,17 @@ function therapy!(ther_restriction, person, para)
 end
 
 function ratetoprob(r)
-    return r * exp(-r)
+    return 1- exp(-r)
 end
 
-function update_agents!(sim, para, ther_restriction, fdbck_education, fdbck_income_depression)
+function delete!(person, list)
+
+    list[findfirst(x->x==person, list)] = last(list)
+    pop!(list)
+
+end
+
+function update_agents!(sim, para)
     # we need to change the order, otherwise agents at the beginning of the 
     # pop array will behave differently from those further in the back
     sim.pop = shuffle(sim.pop)
@@ -453,7 +458,7 @@ function update_agents!(sim, para, ther_restriction, fdbck_education, fdbck_inco
     i = length(sim.pop)
     
     while i > 0
-        update!(sim.pop[i], sim, para, ther_restriction, fdbck_education, fdbck_income_depression)
+        update!(sim.pop[i], sim, para)
         i -= 1
     end
 
@@ -484,13 +489,13 @@ end
 # p_contact is the probability that two agents are connected
 function setup_mixed(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
     
-    pop = Vector{SimplePerson}(undef, 0)
+    pop = SimplePerson[]
     men = [ SimplePerson() for i=1:(para.n/2-para.n/10)]
     women = [ SimplePerson() for i=1:(para.n/2-para.n/10)]
     kids = [ SimplePerson() for i=1:(para.n/5)]
 
-    pop_potentialparents = Vector{SimplePerson}(undef, 0)
-    pop_singles = Vector{SimplePerson}(undef, 0)
+    pop_potentialparents = SimplePerson[]
+    pop_singles = SimplePerson[]
 
 
     for i in eachindex(men)
@@ -515,12 +520,14 @@ function setup_mixed(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kid
     end
 
 
-    #Männern einen Bildungsstand zuweisen und diesen dann für den Rest der Familie übernehmen
-     for i in eachindex(men)
+    #Männern einen Bildungsstand zuweisen und diesen dann für den Rest der Familie übernehmen, außerdem Wahrscheinlichkeit sich in Therapie zu begeben
+    for i in eachindex(men)
          men[i].education = rand(1:4)
          calculateincome!(men[i], para)
          men[i].susceptibility = rand(Normal(1,para.b))
-     end
+
+         setprobther!(men[i], para)
+    end
 
 
     #erstelle Familien mit Partnern
@@ -558,6 +565,7 @@ function setup_mixed(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kid
         #gleicher SÖS aber andere susceptibility
         woman.education = man.education
         calculateincome!(woman, para)
+        setprobther!(woman, para)
         woman.susceptibility = rand(Normal(1, para.b))
 
         #letzte Person auf diese Stelle kopieren und anschließend letzte Person löschen
@@ -599,6 +607,8 @@ function setup_mixed(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kid
         women[i].education = rand(1:4)
         calculateincome!(women[i], para)
         women[i].susceptibility = rand(Normal(1,para.b))
+
+        setprobther!(women[i], para)
     end
     append!(pop_singles, men, women)
     append!(pop, men, women)
@@ -646,7 +656,7 @@ function  setup_sim(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids
     sim
 end
 
-function run_sim(sim, para, ther_restriction, fdbck_education, fdbck_income_depression, verbose = false, n_steps = 150)
+function run_sim(sim, para, verbose = false, n_steps = 150)
     # we keep track of the numbers
     n_depressed = Float64[]
     n_healthy = Float64[]
@@ -672,7 +682,7 @@ function run_sim(sim, para, ther_restriction, fdbck_education, fdbck_income_depr
 
     # simulation steps
     for t in  1:n_steps
-        update_agents!(sim, para, ther_restriction, fdbck_education, fdbck_income_depression)
+        update_agents!(sim, para)
         push!(n_depressed, count(p -> p.state == depressed, sim.pop)/length(sim.pop))
         push!(n_healthy, count(p -> p.state == healthy, sim.pop)/length(sim.pop))
 
@@ -707,7 +717,7 @@ function run_sim(sim, para, ther_restriction, fdbck_education, fdbck_income_depr
 
     end
     
-    consistencycheck!(sim)
+    #consistencycheck!(sim)
 
     # return the results (normalized by pop size)
     n = length(sim.pop)
@@ -802,174 +812,80 @@ function consistencycheck!(sim)
 
 
 end
-function feedback_analytics(sim)
-
-   avg_d = 0.0
-   d_count = 0.0
-   avg_h = 0.0
-   h_count = 0.0
-
-   for person in sim.pop
-        if person.state == depressed
-            d_count += 1
-            avg_d += person.income
-        elseif person.state == healthy
-            h_count +=1
-            avg_h += person.income
-        end
-   end
-
-   return (avg_d/d_count), (avg_h/h_count)
-end
-function educationlevels(sim)
-    counterone = count(p->p.education==1, sim.pop)
-    countertwo = count(p->p.education==2, sim.pop)
-    counterthree = count(p->p.education == 3, sim.pop)
-    counterfour = count(p->p.education == 4, sim.pop)
-
-    return counterone, countertwo, counterthree, counterfour
-end
 function standard!(ther_restriction, fdbck_education, fdbck_income)
     d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids = pre_setup()
-    para = Parameters()
+    para = Parameters(ther_restriction = ther_restriction, fdbck_education = fdbck_education, fdbck_income = fdbck_income)
     sim = setup_sim(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
-    depr, heal, deprhigh, healhigh, deprmiddle, healmiddle, deprlow, heallow, array_depr, array_health, c1, c2, c3, c4 = run_sim(sim, para, ther_restriction, fdbck_education, fdbck_income)
+    depr, heal, deprhigh, healhigh, deprmiddle, healmiddle, deprlow, heallow, array_depr, array_health, c1, c2, c3, c4 = run_sim(sim, para)
     printpara!(sim)
 
-    qual_rates_currentsolution = eval_rates_multipleseeds(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids, ther_restriction, fdbck_education, fdbck_income) 
+    qual_rates_currentsolution = eval_rates_multipleseeds(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids) 
     println("Qualität der aktuellen Lösung: ", qual_rates_currentsolution)
 
     #Plots.plot([c1, c2, c3, c4], labels =["1" "2" "3" "4"])
-
     #Plots.plot([array_depr, array_health], labels = ["depressed: average income" "healthy: average income"])
-    
     #Plots.plot([heal, depr, healhigh, deprhigh, healmiddle, deprmiddle, heallow, deprlow], labels = ["healthy" "depressed" "healthy high ses" "depressed high ses" "healthy middle ses" "depressed middle ses" "healthy low ses" "depressed low ses"])
+    #print_n!(sim)
 end
 
-function comparison_feedback!(ther_restriction)
-    #alle Feedbackeffekte aus
-    d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids = pre_setup()
-    para = Parameters()
-    sim = setup_sim(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
-    depr, heal, deprhigh, healhigh, deprmiddle, healmiddle, deprlow, heallow, array_depr_none, array_health_none, c1, c2, c3, c4 = run_sim(sim, para, ther_restriction, false, false)
-    printpara!(sim)
-    c1, c2, c3, c4 = educationlevels(sim)
-    println("Level 1: ", c1, " Davon depressiv: ", count(p -> p.state == depressed && p.education == 1, sim.pop), " Prozentual: ", count(p -> p.state == depressed && p.education == 1, sim.pop)/c1*100)
-    println("Level 2: ", c2, " Davon depressiv: ", count(p -> p.state == depressed && p.education == 2, sim.pop), " Prozentual: ", count(p -> p.state == depressed && p.education == 2, sim.pop)/c2*100)
-    println("Level 3: ", c3, " Davon depressiv: ", count(p -> p.state == depressed && p.education == 3, sim.pop), " Prozentual: ", count(p -> p.state == depressed && p.education == 3, sim.pop)/c3*100)
-    println("Level 4: ", c4, " Davon depressiv: ", count(p -> p.state == depressed && p.education == 4, sim.pop), " Prozentual: ", count(p -> p.state == depressed && p.education == 4, sim.pop)/c4*100)
 
-
-    qual_rates_currentsolution = eval_rates_multipleseeds(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids, ther_restriction, false, false)
-    println("Qualität der aktuellen Lösung: keine Feedbackeffekte ", qual_rates_currentsolution)
-    
-
-    #Bildungsfeedbackeffekt an
-    d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids = pre_setup()
-    para = Parameters()
-    sim = setup_sim(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
-    depr, heal, deprhigh, healhigh, deprmiddle, healmiddle, deprlow, heallow, array_depr_edu, array_health_edu, c1, c2, c3, c4 = run_sim(sim, para, ther_restriction, true, false)
-    printpara!(sim)  
-    c1, c2, c3, c4 = educationlevels(sim)
-    println("Level 1: ", c1, " Davon depressiv: ", count(p -> p.state == depressed && p.education == 1, sim.pop), " Prozentual: ", count(p -> p.state == depressed && p.education == 1, sim.pop)/c1*100)
-    println("Level 2: ", c2, " Davon depressiv: ", count(p -> p.state == depressed && p.education == 2, sim.pop), " Prozentual: ", count(p -> p.state == depressed && p.education == 2, sim.pop)/c2*100)
-    println("Level 3: ", c3, " Davon depressiv: ", count(p -> p.state == depressed && p.education == 3, sim.pop), " Prozentual: ", count(p -> p.state == depressed && p.education == 3, sim.pop)/c3*100)
-    println("Level 4: ", c4, " Davon depressiv: ", count(p -> p.state == depressed && p.education == 4, sim.pop), " Prozentual: ", count(p -> p.state == depressed && p.education == 4, sim.pop)/c4*100)
-
-
-    qual_rates_currentsolution = eval_rates_multipleseeds(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids,ther_restriction, true, false)
-    println("Qualität der aktuellen Lösung: Bildungseffekt an ", qual_rates_currentsolution)
-    
-
-    #Einkommen-Depressionsfeedbackeffekt an
-    d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids = pre_setup()
-    para = Parameters()
-    sim = setup_sim(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
-    depr, heal, deprhigh, healhigh, deprmiddle, healmiddle, deprlow, heallow, array_depr_inc, array_health_inc, c1, c2, c3, c4 = run_sim(sim, para, ther_restriction, false, true)
-    printpara!(sim) 
-    c1, c2, c3, c4 = educationlevels(sim)
-    println("Level 1: ", c1, " Davon depressiv: ", count(p -> p.state == depressed && p.education == 1, sim.pop), " Prozentual: ", count(p -> p.state == depressed && p.education == 1, sim.pop)/c1*100)
-    println("Level 2: ", c2, " Davon depressiv: ", count(p -> p.state == depressed && p.education == 2, sim.pop), " Prozentual: ", count(p -> p.state == depressed && p.education == 2, sim.pop)/c2*100)
-    println("Level 3: ", c3, " Davon depressiv: ", count(p -> p.state == depressed && p.education == 3, sim.pop), " Prozentual: ", count(p -> p.state == depressed && p.education == 3, sim.pop)/c3*100)
-    println("Level 4: ", c4, " Davon depressiv: ", count(p -> p.state == depressed && p.education == 4, sim.pop), " Prozentual: ", count(p -> p.state == depressed && p.education == 4, sim.pop)/c4*100)
-
-
-    qual_rates_currentsolution = eval_rates_multipleseeds(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids, ther_restriction, false, true)
-    println("Qualität der aktuellen Lösung: Einkommenseffekt an ", qual_rates_currentsolution)
-    
-
-    #beide Feedbackeffekte an
-    d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids = pre_setup()
-    para = Parameters()
-    sim = setup_sim(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
-    depr, heal, deprhigh, healhigh, deprmiddle, healmiddle, deprlow, heallow, array_depr_both, array_health_both, c1, c2, c3, c4 = run_sim(sim, para,ther_restriction, true, true)
-    printpara!(sim)  
-    c1, c2, c3, c4 = educationlevels(sim)
-    println("Level 1: ", c1, " Davon depressiv: ", count(p -> p.state == depressed && p.education == 1, sim.pop), " Prozentual: ", count(p -> p.state == depressed && p.education == 1, sim.pop)/c1 *100)
-    println("Level 2: ", c2, " Davon depressiv: ", count(p -> p.state == depressed && p.education == 2, sim.pop), " Prozentual: ", count(p -> p.state == depressed && p.education == 2, sim.pop)/c2 *100)
-    println("Level 3: ", c3, " Davon depressiv: ", count(p -> p.state == depressed && p.education == 3, sim.pop), " Prozentual: ", count(p -> p.state == depressed && p.education == 3, sim.pop)/c3 *100)
-    println("Level 4: ", c4, " Davon depressiv: ", count(p -> p.state == depressed && p.education == 4, sim.pop), " Prozentual: ", count(p -> p.state == depressed && p.education == 4, sim.pop)/c4 *100)
-
-
-    qual_rates_currentsolution = eval_rates_multipleseeds(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids, ther_restriction, true, true) 
-    println("Qualität der aktuellen Lösung: beide Feedbackeffekte an ", qual_rates_currentsolution)
-    
-
-
-    Plots.plot([array_depr_none, array_health_none, array_depr_edu, array_health_edu, array_depr_inc, array_health_inc, array_depr_both, array_health_both], labels = ["depressed: none" "healthy: none" "depressed: edu" "healthy: edu" "depressed: inc" "healthy: inc" "depressed: both" "healthy: both"])
-
-    #Plots.plot([array_depr_none, array_health_none], labels = ["depressed: none" "healthy: none"])
-    #Plots.plot([array_depr_edu, array_health_edu], labels = ["depressed: edu" "healthy: edu" ])
-    #Plots.plot([array_depr_inc, array_health_inc], labels = [ "depressed: inc" "healthy: inc" ])
-    #Plots.plot([array_depr_both, array_health_both], labels = [ "depressed: both" "healthy: both"])
-
-end
-
-function quality_plots!(fdbck_education, fdbck_income)
-    qual_parent, parameter_field, lowpar = quality_function_para("parent", ther_restriction, fdbck_education, fdbck_income)
-    qual_friends, parameter_field, lowfr= quality_function_para("friends", ther_restriction, fdbck_education, fdbck_income)
-    qual_spouse, parameter_field, lowsp = quality_function_para("spouse", ther_restriction, fdbck_education, fdbck_income)
-    qual_child, parameter_field, lowch= quality_function_para("child", ther_restriction, fdbck_education, fdbck_income)
-    qual_ac, parameter_field, lowac = quality_function_para("ac", ther_restriction, fdbck_education, fdbck_income)
-    qual_prev, parameter_field, lowprev = quality_function_para("prev", ther_restriction, fdbck_education, fdbck_income)
-    qual_h, parameter_field, lowh = quality_function_para("h", ther_restriction, fdbck_education, fdbck_income)
-
-    Plots.plot([qual_parent, qual_friends, qual_spouse, qual_child, qual_ac, qual_prev, qual_h], labels = ["mA Eltern" "mA Freunde" "mA spouse" "mA Kind" "mA ac" "mA prev" "mA h"], x = [parameter_field])
-    
-    #println("lowest parent ", lowpar)
-    #println("lowest friends ", lowfr)
-    #println("lowest spouse ", lowsp)
-    #println("lowest child ", lowch)
-    #println("lowest ac ", lowac)
-    #println("lowest prev ", lowprev)
-    #println("lowest h ", lowh)
-end
-
-#qual = approximation_rates(50, true, true, false) 
+#qual = approximation_rates(50) 
 #Plots.plot([qual], labels=["mittlere Abweichung"]) 
 
-#qual= optimization_current_para(50, true, false, false)
+#qual= optimization_current_para(30)
 #Plots.plot([qual], labels=["mittlere Abweichung"]) 
 
 
 #hier kann sich ein Graph ausgegeben werden, bei dem geschaut wird, wie sich die Qualität der Simulation über den Bereich des Parameters entwickelt
 #mögliche Eingaben= "parent" "friends" "spouse" "child" "ac" "prev" "h"
-#quality_plots!(false, false)
-#qual_h, parameter_field= quality_function_para("h", true, true)
+#quality_plots!()
+#qual_h, parameter_field= quality_function_para("h")
 #Plots.plot([qual_h], labels = ["mA h"], x = [parameter_field])
 
 #standard!(true, false, false)
 
 #sensi!()
-df = qual_sensi()
 
 
-df_par_fr = data(df) * mapping(:par, :fr)
-axis = (type = Axis3, width = 300, height = 300)
-plt = df_par_fr * linear() * mapping(qual)
+
+
+
+
+df_par_fr, df_par_h, df_h_fr = qual_sensi()
+
+
+temp = subset(df_par_fr, :par => p -> p .== 0.0, :fr => f -> f.< 1)
+temp2 = subset(df_par_fr, :par => p -> p .== 0.05, :fr => f -> f.< 1)
+temp3 = subset(df_par_fr, :par => p -> p .== 0.1, :fr => f -> f.< 1)
+temp4 = subset(df_par_fr, :par => p -> p .== 0.15, :fr => f -> f.< 1)
+temp5 = subset(df_par_fr, :par => p -> p .== 0.2, :fr => f -> f.< 1)
+temp6 = subset(df_par_fr, :par => p -> p .== 0.25, :fr => f -> f.< 1)
+temp7 = subset(df_par_fr, :par => p -> p .== 0.3, :fr => f -> f.< 1)
+temp8 = subset(df_par_fr, :par => p -> p .== 0.35, :fr => f -> f.< 1)
+temp9 = subset(df_par_fr, :par => p -> p .== 0.4, :fr => f -> f.< 1)
+temp10 = subset(df_par_fr, :par => p -> p .== 0.45, :fr => f -> f.< 1)
+temp11 = subset(df_par_fr, :par => p -> p .== 0.5, :fr => f -> f.< 1)
+
+
+d  = data(temp)  * mapping(:fr)
+d2 = data(temp2) * mapping(:fr)
+d3 = data(temp3) * mapping(:fr)
+d4 = data(temp4) * mapping(:fr)
+d5 = data(temp5) * mapping(:fr)
+d6 = data(temp6) * mapping(:fr)
+d7 = data(temp7) * mapping(:fr)
+d8 = data(temp8) * mapping(:fr)
+d9 = data(temp9) * mapping(:fr)
+d10 = data(temp10) * mapping(:fr)
+d11 = data(temp11) * mapping(:fr)
+
+
+plt = d * mapping(:qual) + d2 * mapping(:qual) + d3 * mapping(:qual) + d4 * mapping(:qual) + d5 * mapping(:qual)+ d6 * mapping(:qual) + d7*mapping(:qual) + d8 * mapping(:qual) + d9*mapping(:qual) + d10 *mapping(:qual) + d11*mapping(:qual)
 draw(plt; axis = axis)
 
-#comparison_feedback!(false)
 
-#qual, qual_random = params_with_multipleseeds(true, false, false)
+
+#comparison_feedback!(true)
+
+#qual, qual_random = params_with_multipleseeds()
 #Plots.plot([qual, qual_random], labels=["Qualität bei unterschiedlichem Seed: beste Para" "Zufallspara"])
