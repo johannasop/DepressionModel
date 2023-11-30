@@ -393,7 +393,6 @@ function comparison_feedback!(ther_restriction)
 
 end
 
-
 function print_n!(sim)
     avg_n_friends = 0
     avg_n_ac = 0
@@ -444,4 +443,126 @@ function print_n!(sim)
     
     #sort!(ages)
     #hier wäre ein frquency-Plot noch schön für die Altersverteilung
+end
+
+function params_with_multipleseeds(ther_restriction, fdbck_education, fdbck_income)
+
+    qual_array = Float64[]
+    rand_qual_array = Float64[]
+    
+    for i = 0:20
+        para = Parameters(seed = i)
+
+        d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids = pre_setup()
+        sim = setup_sim(para,d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
+        run_sim(sim, para)
+
+        qual = evaluationrates(sim)
+        push!(qual_array, qual)
+
+    end
+    for i = 0:20
+        rand_para = randpara()
+        rand_para.seed = i
+
+        d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids = pre_setup()
+        sim = setup_sim(rand_para,d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
+        run_sim(sim, rand_para)
+
+        qual = evaluationrates(sim)
+        push!(rand_qual_array, qual)
+    end
+    return qual_array, rand_qual_array
+end
+
+function printpara!(sim)
+    rr_par, rr_fr, rr_ac, rr_sp, rr_ch = toriskratio(sim)
+    print( "\n prev ", ratedep(sim) )
+    print( "\n prev parents ", ratedep_parents(sim) )
+    print( "\n prev friends ", ratedep_friends(sim) )
+    print( "\n prev ac ", ratedep_ac(sim) )
+    print( "\n prev spouse ", ratedep_spouse(sim) )
+    print( "\n prev children ", ratedep_child(sim) )
+    print( "\n avg risk ", averagerisk(sim) , "\n")
+
+    print( "\n rr parents ", rr_par)
+    print( "\n rr fr ", rr_fr)
+    #print( "\n rr ac ", rr_ac)
+    print( "\n rr sp ", rr_sp)
+    print( "\n rr ch ", rr_ch, "\n")
+end
+
+function standard_statistics!(steps)
+    prev = Float64[]
+    prev_parents = Float64[]
+    prev_friends = Float64[]
+    prev_ac = Float64[]
+    prev_kids = Float64[]
+    prev_spouse = Float64[]
+    avg_risk = Float64[]
+    qual = Float64[]
+
+    d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids = pre_setup()
+    para = Parameters()
+    sim = setup_sim(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
+    depr, heal, deprhigh, healhigh, deprmiddle, healmiddle, deprlow, heallow, array_depr, array_health, c1, c2, c3, c4 = run_sim(sim, para)
+
+
+    for i=1:steps
+
+        depr, heal, deprhigh, healhigh, deprmiddle, healmiddle, deprlow, heallow, array_depr, array_health, c1, c2, c3, c4 = run_sim(sim, para)
+
+        push!(prev, ratedep(sim))
+        push!(prev_parents, ratedep_parents(sim))
+        push!(prev_friends, ratedep_friends(sim))
+        push!(prev_ac, ratedep_ac(sim))
+        push!(prev_kids, ratedep_child(sim))
+        push!(prev_spouse, ratedep_spouse(sim))
+        push!(avg_risk, averagerisk(sim))
+        push!(qual, eval_rates_multipleseeds(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids))
+
+        print("+")
+    end
+
+    println("Das Minimum der Prävalenz ist: ", minimum(prev))
+    println("Das Maximum der Prävalenz ist: ", maximum(prev))
+    println("Der Durchschnitt der Prävalenz ist: ", mean(prev))
+    println("Die Varianz der Prävalenz ist: ", var(prev))
+
+    println("Das Minimum der Prävalenz (Eltern) ist: ", minimum(prev_parents))
+    println("Das Maximum der Prävalenz (Eltern) ist: ", maximum(prev_parents))
+    println("Der Durchschnitt der Prävalenz (Eltern) ist: ", mean(prev_parents))
+    println("Die Varianz der Prävalenz (Eltern) ist: ", var(prev_parents))
+
+    println("Das Minimum der Prävalenz (Freunde) ist: ", minimum(prev_friends))
+    println("Das Maximum der Prävalenz (Freunde) ist: ", maximum(prev_friends))
+    println("Der Durchschnitt der Prävalenz (Freunde) ist: ", mean(prev_friends))
+    println("Die Varianz der Prävalenz (Freunde) ist: ", var(prev_friends))
+
+    println("Das Minimum der Prävalenz (ac) ist: ", minimum(prev_ac))
+    println("Das Maximum der Prävalenz (ac) ist: ", maximum(prev_ac))
+    println("Der Durchschnitt der Prävalenz (ac) ist: ", mean(prev_ac))
+    println("Die Varianz der Prävalenz (ac) ist: ", var(prev_ac))
+
+    println("Das Minimum der Prävalenz (Partner) ist: ", minimum(prev_spouse))
+    println("Das Maximum der Prävalenz (Partner) ist: ", maximum(prev_spouse))
+    println("Der Durchschnitt der Prävalenz (Partner) ist: ", mean(prev_spouse))
+    println("Die Varianz der Prävalenz (Partner) ist: ", var(prev_spouse))
+
+    println("Das Minimum der Prävalenz (Kinder) ist: ", minimum(prev_kids))
+    println("Das Maximum der Prävalenz (Kinder) ist: ", maximum(prev_kids))
+    println("Der Durchschnitt der Prävalenz (Kinder) ist: ", mean(prev_kids))
+    println("Die Varianz der Prävalenz (Kinder) ist: ", var(prev_kids))
+
+    println("Das Minimum des durchschnittlichen Risikos ist: ", minimum(avg_risk))
+    println("Das Maximum des durchschnittlichen Risikos ist: ", maximum(avg_risk))
+    println("Der Durchschnitt des durchschnittlichen Risikos ist: ", mean(avg_risk))
+    println("Die Varianz des durchschnittlichen Risikos ist: ", var(avg_risk))
+
+    println("Das Minimum der Abweichung ist: ", minimum(qual))
+    println("Das Maximum der Abweichung ist: ", maximum(qual))
+    println("Der Durchschnitt der Abweichung ist: ", mean(qual))
+    println("Die Varianz der Abweichung ist: ", var(qual))
+
+
 end

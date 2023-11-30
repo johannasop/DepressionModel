@@ -4,7 +4,7 @@ Base.@kwdef mutable struct Optimalrates
     prev::Float64 = 0.08
     rate_parents::Float64 = 0.24
     rate_friends::Float64=0.32
-    rate_ac::Float64=0.12
+    rate_ac::Float64=0.16
     rate_spouse::Float64=0.32
     rate_child::Float64=0.24
 
@@ -152,7 +152,7 @@ end
 
 function randpara()
 
-    return Parameters(prev = rand(), rate_parents= rand(), rate_friends=rand(), rate_ac = rand(), rate_child = rand(), rate_spouse = rand(), h= rand(), b=0.1)
+    return Parameters(prev = rand(0.0:3.0), rate_parents= rand(0.0:3.0), rate_friends=rand(0.0:3.0), rate_ac = rand(0.0:3.0), rate_child = rand(0.0:3.0), rate_spouse = rand(0.0:3.0), h= rand(), b=rand(0.0:10.0))
 
 end
 
@@ -162,7 +162,7 @@ end
 
 function paraplusnorm(paras)
     
-    new_paras = Parameters(prev=limit(0, paras.prev + rand(Normal(0,0.1)), 1), rate_parents = limit(0, paras.rate_parents + rand(Normal(0,0.1)), 1), rate_friends = limit(0, paras.rate_friends + rand(Normal(0,0.1)), 1), rate_ac = limit(0, paras.rate_ac + rand(Normal(0,0.1)), 1), rate_child = limit(0, paras.rate_child + rand(Normal(0,0.1)), 1), rate_spouse = limit(0, paras.rate_spouse + rand(Normal(0,0.1)), 1), h = limit(0, paras.h + rand(Normal(0,0.1)), 1))
+    new_paras = Parameters(prev=limit(0, paras.prev + rand(Normal(0,1.0)), 3), rate_parents = limit(0, paras.rate_parents + rand(Normal(0,1.0)), 3), rate_friends = limit(0, paras.rate_friends + rand(Normal(0,1.0)), 3), rate_ac = limit(0, paras.rate_ac + rand(Normal(0,1.0)), 3), rate_child = limit(0, paras.rate_child + rand(Normal(0,1.0)), 3), rate_spouse = limit(0, paras.rate_spouse + rand(Normal(0,1.0)), 3), h = limit(0, paras.h + rand(Normal(0,0.1)), 1), b = limit(0, paras.b + rand(Normal(0,1.0)), 5))
 
     return new_paras
 end
@@ -427,50 +427,7 @@ function present_optimalsolution_rr(pq_rr)
         printpara!(sim)
     end
 end
-function params_with_multipleseeds(ther_restriction, fdbck_education, fdbck_income)
 
-    qual_array = Float64[]
-    rand_qual_array = Float64[]
-    
-    for i = 0:20
-        para = Parameters(seed = i)
 
-        d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids = pre_setup()
-        sim = setup_sim(para,d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
-        run_sim(sim, para)
-
-        qual = evaluationrates(sim)
-        push!(qual_array, qual)
-
-    end
-    for i = 0:20
-        rand_para = randpara()
-        rand_para.seed = i
-
-        d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids = pre_setup()
-        sim = setup_sim(rand_para,d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
-        run_sim(sim, rand_para)
-
-        qual = evaluationrates(sim)
-        push!(rand_qual_array, qual)
-    end
-    return qual_array, rand_qual_array
-end
-function printpara!(sim)
-    rr_par, rr_fr, rr_ac, rr_sp, rr_ch = toriskratio(sim)
-    print( "\n prev ", ratedep(sim) )
-    print( "\n prev parents ", ratedep_parents(sim) )
-    print( "\n prev friends ", ratedep_friends(sim) )
-    print( "\n prev ac ", ratedep_ac(sim) )
-    print( "\n prev spouse ", ratedep_spouse(sim) )
-    print( "\n prev children ", ratedep_child(sim) )
-    print( "\n avg risk ", averagerisk(sim) , "\n")
-
-    print( "\n rr parents ", rr_par)
-    print( "\n rr fr ", rr_fr)
-    #print( "\n rr ac ", rr_ac)
-    print( "\n rr sp ", rr_sp)
-    print( "\n rr ch ", rr_ch, "\n")
-end
 
 

@@ -2,28 +2,28 @@
 
 Base.@kwdef mutable struct Parameters
 
-    prev::Float64 = 0.8509
+    prev::Float64 = 0.066013
     rem::Float64 = 0.51
     rem_ther::Float64 = 0.45
     avail_high::Float64 = 0.5
     avail_middle::Float64 = 0.2
     avail_low::Float64 = 0.1
-    rate_parents::Float64= 0.04386
-    rate_friends::Float64 = 0.216716
-    rate_ac::Float64 = 0.01044
-    rate_child::Float64 = 0.05084
-    rate_spouse::Float64 = 0.115645
+    rate_parents::Float64= 0.0
+    rate_friends::Float64 = 1.75829
+    rate_ac::Float64 = 0.07639
+    rate_child::Float64 = 0.0
+    rate_spouse::Float64 = 0.55506
     n::Int64 = 1000
     n_fam::Int64 = 300
     p_ac::Float64 = 15
-    p_fr::Float64 = 7
+    p_fr::Float64 = 4
     seed::Int64 = 0
 
     #Breite der Verteilung der susceptibility
-    b::Float64 = 0.1
+    b::Float64 = 1.0
 
     #Heritabilitätsindex(?)
-    h::Float64 = 0.727
+    h::Float64 = 0.1148
 
     #Wahrscheinlichkeiten für unterschiedliche Anzahl von Kindern
     p_none::Float64 = 0.18
@@ -34,6 +34,12 @@ Base.@kwdef mutable struct Parameters
     #durations beinhaltet die häufigsten Trennungsjahre, also wird zufällig eines dieser Jahre ausgewählt und dann aus einer Poisson-Verteilung die erwartete Beziehungsdauer bestimmt
     partnersamecircle::Float64 = 0.7
     durations::Vector{Int64} = [3, 7, 15]
+
+    #Nummer neuer enger Freunde und weniger enger Freunde pro Jahr
+    new_ac_year::Int64 = 2
+    p_new_friend_year::Float64 = 0.2
+    friendloss::Float64 = 0.10
+    acloss::Float64 = 0.30
 
     #Einkommensverteilung sd 
     sd_income::Float64 = 7.5

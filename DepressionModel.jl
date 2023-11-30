@@ -47,15 +47,21 @@ mutable struct SimplePerson
     rellength::Int64
     currdur::Int64
 
-    #death this year
-    deathinyear::Int64
+    #relevant social circle for social dynamics; already known people are excluded
+    rel_socialcircle::Vector{SimplePerson}
+
+    #length of current depressive episode
+    length_dep_episode::Int64
+
+    #number of depressive episodes
+    n_dep_episode::Int64
 
 end
 
 
 # how we construct a person object
-SimplePerson() = SimplePerson([], [], [], [], [], 0, healthy, 0, 0, 0, 0, 0, 0, 0, 0)   # default Person is susceptible and has no contacts
-SimplePerson(state) = SimplePerson([], [], [], [], [], 0, state, 0, 0, 0, 0, 0, 0, 0, 0)  # default Person has no contacts
+SimplePerson() = SimplePerson([], [], [], [], [], 0, healthy, 0, 0, 0, 0, 0, 0, 0, [], 0, 0)   # default Person is susceptible and has no contacts
+SimplePerson(state) = SimplePerson([], [], [], [], [], 0, state, 0, 0, 0, 0, 0, 0, 0, [], 0, 0)  # default Person has no contacts
 
 
 # this is a parametric type
@@ -93,17 +99,13 @@ function update!(person, sim, para)
     if (findfirst(p-> p.state == depressed, person.friends) !== nothing)
         percentage = count(p -> p.state == depressed, person.friends)/length(person.friends)
 
-        # if percentage > 0.3
-        #     rate += 0.1
-        # end
-        # if percentage > 0.4
-        #     rate += 0.15
-        # end
-        rate += para.rate_friends 
+        rate += para.rate_friends * percentage
     end
 
     if (findfirst(p-> p.state == depressed, person.ac) !== nothing)
-        rate += para.rate_ac
+        percentage = count(p -> p.state == depressed, person.ac)/length(person.ac)
+
+        rate += para.rate_ac * percentage
     end
 
     if length(person.spouse) > 0 && person.spouse[1].state == depressed 
@@ -115,14 +117,19 @@ function update!(person, sim, para)
     end
 
     person.risk = ratetoprob(rate * person.susceptibility)
-    if rand() < person.risk
+    if rand() < person.risk 
         person.state = depressed
     end
   
     #Spontanremmisionen 
     if rand() < ratetoprob(para.rem) && person.state == depressed 
         person.state = healthy
+        person.n_dep_episode += 1
+        person.length_dep_episode = 0
+
         setprobther!(person, para)
+    elseif person.state == depressed
+        person.length_dep_episode += 1
     end
 
     if person.state == depressed
@@ -156,6 +163,9 @@ function population_update(person, sim, para)
             splitup!(person, sim) 
         end
     end
+
+    #Dynamik im sozialen Umfeld!
+    social_dynamic!(person, para, sim)
 
     #SÖS: ergibt sich aus SÖS der Eltern, bisschen Zufall aber enthalten, da Intervall des Incomes bei Berechnung des incomes aus Bildungsstand heraus bisschen überlappt für jeden Bildungsstand
     #hier wird quasi erwarteter Bildungsstand berechnet
@@ -233,7 +243,7 @@ function newkid!(sim, para)
     parent = sim.pop_potentialparents[i]
 
     #SES und susceptibility: gleicher SES wie Eltern aber bisschen andere susceptibility
-    newkid.susceptibility =  (para.h * ((parent.susceptibility + parent.spouse[1].susceptibility)/2) + ((1-para.h) * rand(Normal(1,para.b))))
+    newkid.susceptibility =  (para.h * ((parent.susceptibility + parent.spouse[1].susceptibility)/2) + ((1-para.h) * limit(0, rand(Normal(1,para.b)), 50))) 
 
     push!(newkid.parents, parent)
     push!(newkid.parents, parent.spouse[1])
@@ -242,23 +252,8 @@ function newkid!(sim, para)
 
     #neue Menschen brauchen Freunde und Bekannte, das dürfen aber nicht sie selber sein 
 
-    number_ac = rand(Poisson(para.p_ac))
-    number_fr = rand(Poisson(para.p_fr))
-    while length(newkid.ac) < number_ac
-        pos_ac = sim.pop[rand(1:length(sim.pop))]
-        if pos_ac != newkid && !(pos_ac in newkid.parents) && !(pos_ac in newkid.ac)
-            push!(pos_ac.ac, newkid)
-            push!(newkid.ac, pos_ac)
-        end
-    end
-    while length(newkid.friends) < number_fr
-        pos_fr = sim.pop[rand(1:length(sim.pop))] 
-        if pos_fr != newkid && !(pos_fr in newkid.parents) && !(pos_fr in newkid.ac) && !(pos_fr in newkid.friends)
-            push!(pos_fr.friends, newkid)
-            push!(newkid.friends, pos_fr)
-        end
-    end
-
+    findsocial!(newkid, sim.pop, para)
+    
     #werden Eltern gelöscht oder bleiben auf der Liste potentieller Eltern? Außerdem können sie mehr als drei Kinder kriegen
     p = 0.0
     if length(parent.children) > 3 
@@ -304,6 +299,13 @@ function death(person, sim)
             delete!(person, person.ac[i].ac)     
         end
     end
+    
+    #Person muss außerdem aus dem sc von jeder Person gelöscht werden
+    for i in eachindex(sim.pop)
+        if person in sim.pop[i].rel_socialcircle
+            delete!(person, sim.pop[i].rel_socialcircle)
+        end
+    end
 
 
     #Mensch aus Population entfernen
@@ -343,6 +345,15 @@ function newpartner!(person, sim, para)
             push!(person.spouse, potpartner)
             push!(potpartner.spouse, person)
 
+            add_to_sc!(person, potpartner)
+            add_to_sc!(potpartner, person)
+            if potpartner in person.rel_socialcircle
+                delete!(potpartner, person.rel_socialcircle)
+            end
+            if person in potpartner.rel_socialcircle
+                delete!(person, potpartner.rel_socialcircle)
+            end
+
             delete!(person, sim.pop_singles)
             delete!(potpartner, sim.pop_singles)
 
@@ -350,19 +361,13 @@ function newpartner!(person, sim, para)
             if person in potpartner.friends
                 delete!(potpartner, person.friends)
                 delete!(person, potpartner.friends) 
-                if person in potpartner.friends
-                    println("spouse still in friends")
-                end 
             end
             if person in potpartner.ac
                 delete!(potpartner, person.ac)
                 delete!(person, potpartner.ac)
-                if person in potpartner.ac
-                    println("spouse still in ac")
-                end
             end
                
-
+            
             #Personen landen auf der Liste bei bestimmter Wahrscheinlichkeit: ab 55 Jahren können sie keine Kinder mehr bekommen
             if rand() > para.p_none && person.age < 55 && potpartner.age < 55
                 push!(sim.pop_potentialparents, person)
@@ -398,6 +403,217 @@ function splitup!(person, sim)
 
 end
 
+function findsocial!(person, pop, para)
+
+    number_ac = rand(Poisson(para.p_ac))
+    number_fr = rand(Poisson(para.p_fr))
+
+    while length(person.friends) < number_fr
+        pos_fr = pop[rand(1:length(pop))] 
+        if pos_fr != person  && !(pos_fr in person.parents) && !(pos_fr in person.spouse) && !(pos_fr in person.children) && !(pos_fr in person.friends)
+            push!(pos_fr.friends, person)
+            push!(person.friends, pos_fr)
+            add_to_sc!(person, pos_fr)
+            add_to_sc!(pos_fr, person)
+            if pos_fr in person.rel_socialcircle
+                delete!(pos_fr, person.rel_socialcircle)
+            end 
+            if person in pos_fr.rel_socialcircle
+                delete!(person, pos_fr.rel_socialcircle)
+            end
+        end
+    end
+
+    while length(person.ac) < number_ac
+        #sollte es keine potenziellen Bekannten mehr im Umkreis geben, oder die Person keine Freunde haben, werden einfach Personen aus der Population ausgewählt
+        if length(person.friends) == 0 || length(person.rel_socialcircle) == 0
+            pos_ac = pop[rand(1:length(pop))]
+            if pos_ac != person && !(pos_ac in person.parents) && !(pos_ac in person.spouse) && !(pos_ac in person.children) && !(pos_ac in person.ac) && !(pos_ac in person.friends)
+                push!(pos_ac.ac, person)
+                push!(person.ac, pos_ac)
+
+                if pos_ac in person.rel_socialcircle
+                    delete!(pos_ac, person.rel_socialcircle)
+                end
+                if person in pos_ac.rel_socialcircle
+                    delete!(person, pos_ac.rel_socialcircle)
+                end
+            end
+        else
+            #folgende Lösung würde die Freunde von Freunden zu Bekannten machen und so noch mehr ein tatsächliches Netzwerk erzeugen
+            pos_ac = person.rel_socialcircle[rand(1:length(person.rel_socialcircle))]
+            push!(pos_ac.ac, person)
+            push!(person.ac, pos_ac)
+            delete!(pos_ac, person.rel_socialcircle)
+            if person in pos_ac.rel_socialcircle
+                delete!(person, pos_ac.rel_socialcircle)
+            end
+        end
+    end            
+end
+
+function findsocial_old!(person, pop, para)
+    number_ac = rand(Poisson(para.p_ac))
+    number_fr = rand(Poisson(para.p_fr))
+
+    while length(person.friends) < number_fr
+        pos_fr = pop[rand(1:length(pop))] 
+        if pos_fr != person  && !(pos_fr in person.parents) && !(pos_fr in person.spouse) && !(pos_fr in person.children) && !(pos_fr in person.friends)
+            push!(pos_fr.friends, person)
+            push!(person.friends, pos_fr)
+        end
+    end
+    while length(person.ac) < number_ac
+        pos_ac = pop[rand(1:length(pop))]
+        if pos_ac != person && !(pos_ac in person.parents) && !(pos_ac in person.spouse) && !(pos_ac in person.children) && !(pos_ac in person.ac) && !(pos_ac in person.friends)
+            push!(pos_ac.ac, person)
+            push!(person.ac, pos_ac)
+        end
+    end
+end
+
+function social_dynamic!(person, para, sim)
+
+    #jährlich neue Bekannte: diese sollen aus dem ähnlichen sozialen Umfeld stammen und den gleichen mental state haben
+    for i=1:rand(Poisson(para.new_ac_year))
+        if length(person.ac) > 0 
+            if length(person.rel_socialcircle) > 0
+                old_ac = person.ac[rand(1:length(person.ac))]
+                delete!(old_ac, person.ac)
+                delete!(person, old_ac.ac)
+
+                l_ac = length(person.ac)
+                #new ac is picked dependend on depression State
+                if count(p->p.state == person.state, person.rel_socialcircle) > 0
+                    while l_ac == length(person.ac) 
+                        pos_ac = person.rel_socialcircle[rand(1:length(person.rel_socialcircle))]
+
+                        if pos_ac == person
+                            println("ich bins selber")
+                        end
+                        if pos_ac in person.parents
+                            println("meine Eltern")
+                        end
+                        if pos_ac in person.spouse
+                            println("mein Partner")
+                        end
+                        if pos_ac in person.children
+                            println("die Kinder!")
+                        end
+                        if pos_ac in person.ac
+                            println("der ist mir doch schon bekannt")
+                        end
+                        if pos_ac in person.friends
+                            println("meine friends!")
+                        end
+
+                        if pos_ac.state == person.state 
+                            push!(pos_ac.ac, person)
+                            push!(person.ac, pos_ac)
+ 
+                            delete!(pos_ac, person.rel_socialcircle)
+                            if person in pos_ac.rel_socialcircle
+                                delete!(person, pos_ac.rel_socialcircle)
+                            end
+                        end      
+        
+                    end
+                else
+                    while l_ac == length(person.ac)
+                        pos_ac = sim.pop[rand(1:length(sim.pop))]
+
+                        if pos_ac != person && !(pos_ac in person.parents) && !(pos_ac in person.spouse) && !(pos_ac in person.children) && !(pos_ac in person.ac) && !(pos_ac in person.friends) 
+                            push!(pos_ac.ac, person)
+                            push!(person.ac, pos_ac)
+
+                            if pos_ac in person.rel_socialcircle
+                                delete!(pos_ac, person.rel_socialcircle)
+                            end
+                            if person in pos_ac.rel_socialcircle
+                                delete!(person, pos_ac.rel_socialcircle)
+                            end
+                        end 
+                    end
+                end
+            end
+        end
+    end
+    
+
+    if rand() < para.p_new_friend_year
+        if length(person.friends)>0 && length(person.rel_socialcircle) > 0
+            old_friend = person.friends[rand(1:length(person.friends))]
+            delete!(old_friend, person.friends)
+            delete!(person, old_friend.friends)
+
+            l_friends = length(person.friends)
+            #new friend is picked dependend on depression State
+            if count(p->p.state == person.state, person.rel_socialcircle) > 0
+                while l_friends == length(person.friends)         
+                    pos_fr = person.rel_socialcircle[rand(1:length(person.rel_socialcircle))]
+
+                    if pos_fr.state == person.state
+                        push!(pos_fr.friends, person)
+                        push!(person.friends, pos_fr)
+                        add_to_sc!(person, pos_fr)
+                        add_to_sc!(pos_fr, person)
+                        delete!(pos_fr, person.rel_socialcircle)
+                        if person in pos_fr.rel_socialcircle
+                            delete!(person, pos_fr.rel_socialcircle)
+                        end
+                    end
+
+                end
+            else
+                while l_friends == length(person.friends)
+                    pos_fr = sim.pop[rand(1:length(sim.pop))]
+
+                    if pos_fr != person && !(pos_fr in person.parents) && !(pos_fr in person.spouse) && !(pos_fr in person.children) && !(pos_fr in person.ac) && !(pos_fr in person.friends) 
+                        push!(pos_fr.friends, person)
+                        push!(person.friends, pos_fr)
+                        add_to_sc!(person, pos_fr)
+                        add_to_sc!(pos_fr, person)
+                        if pos_fr in person.rel_socialcircle
+                            delete!(pos_fr, person.rel_socialcircle)
+                        end
+                        if person in pos_fr.rel_socialcircle
+                            delete!(person, pos_fr.rel_socialcircle)
+                        end
+                    end 
+                end
+            end
+        end
+    end
+    
+
+    #mit gewisser Wahrscheinlichkeit verlieren depressive Personen darüber hinaus auch Freunde und Bekannte nach gewisser Zeit; hier ab zweitem Jahr der Depression 
+
+    if length(person.friends) > 0 && person.state == depressed && rand() < para.friendloss && person.length_dep_episode > 1
+        fr = person.friends[rand(1:length(person.friends))]
+
+        delete!(fr, person.friends)
+        delete!(person, fr.friends)
+
+    elseif length(person.ac) > 0 && person.state == depressed && rand() < para.acloss && person.length_dep_episode > 1
+        ac = person.ac[rand(1:length(person.ac))]
+
+        delete!(person, ac.ac)
+        delete!(ac, person.ac)
+    end
+
+end
+
+function add_to_sc!(person, newperson)
+
+    if length(newperson.friends) > 0
+        for friend in newperson.friends
+            if friend != person && !(friend in person.parents) && !(friend in person.spouse) && !(friend in person.children) && !(friend in person.ac) && !(friend in person.friends) && !(friend in person.rel_socialcircle)
+                push!(person.rel_socialcircle, friend)
+            end
+        end
+    end
+
+end
 function calculateincome!(person, para)
 
     #Einkommen wird bestimmt aus Bildungsstand, aber Intervalle für jeden Bildungsstand überlappen etwas, man kann also auch in anderer Einkommenklasse landen (Normalverteilungen je Bildungsstand mit Mittelwerten bei 1 --> 13, 2 --> 38, 3 --> 63, 4--> 88 und Standardabweichung von 15)
@@ -433,6 +649,8 @@ function therapy!(person, para)
     #Annahme, dass Therapiemotivation mit weniger Erfolg sinkt
     if rand() < person.prob_ther && rand() < ratetoprob(para.rem_ther)
         person.state = healthy
+        person.n_dep_episode += 1
+        person.length_dep_episode = 0
     elseif (person.prob_ther - 0.1) > 0
         person.prob_ther = person.prob_ther - 0.1
     end
@@ -524,7 +742,7 @@ function setup_mixed(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kid
     for i in eachindex(men)
          men[i].education = rand(1:4)
          calculateincome!(men[i], para)
-         men[i].susceptibility = rand(Normal(1,para.b))
+         men[i].susceptibility = limit(0, rand(Normal(1,para.b)), 50)
 
          setprobther!(men[i], para)
     end
@@ -543,6 +761,8 @@ function setup_mixed(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kid
             if ((man.age - woman.age) <= 5) || ((man.age - woman.age) >= -5)
                 push!(man.spouse, woman)
                 push!(woman.spouse, man)
+                add_to_sc!(man, woman)
+                add_to_sc!(woman, man)
             else 
                 x = rand(1:length(men))
                 y = rand(1:length(women))
@@ -562,11 +782,11 @@ function setup_mixed(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kid
         woman.currdur = man.currdur
 
 
-        #gleicher SÖS aber andere susceptibility
+        #gleicher SÖS aber andere susceptibility: evtl. gar nicht so logisch, dass sie eine andere susceptibility haben: könnte man drüber diskutieren
         woman.education = man.education
         calculateincome!(woman, para)
         setprobther!(woman, para)
-        woman.susceptibility = rand(Normal(1, para.b))
+        woman.susceptibility = limit(0, rand(Normal(1, para.b)), 50)
 
         #letzte Person auf diese Stelle kopieren und anschließend letzte Person löschen
         men[x] = last(men)
@@ -582,7 +802,7 @@ function setup_mixed(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kid
         x = rand(1:(para.n_fam*2))   
 
         #die sus der Kinder besteht zu einem Teil aus der der Eltern und zu einem Teil aus Umwelteinflüssen: Anteile können über para.h verändert werden
-        kids[i].susceptibility =  (para.h * ((pop[x].susceptibility + pop[x].spouse[1].susceptibility)/2) + ((1-para.h) * rand(Normal(1,para.b))))
+        kids[i].susceptibility =  (para.h * ((pop[x].susceptibility + pop[x].spouse[1].susceptibility)/2) + ((1-para.h) * limit(0,rand(Normal(1,para.b)), 50)))
 
 
         push!(pop, kids[i])
@@ -606,7 +826,7 @@ function setup_mixed(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kid
     for i in eachindex(women)
         women[i].education = rand(1:4)
         calculateincome!(women[i], para)
-        women[i].susceptibility = rand(Normal(1,para.b))
+        women[i].susceptibility = limit(0, rand(Normal(1,para.b)), 50)
 
         setprobther!(women[i], para)
     end
@@ -616,28 +836,9 @@ function setup_mixed(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kid
 
     #Bekannte und Freunde finden
     for i in eachindex(pop)
-        number_ac = rand(Poisson(para.p_ac))
-        number_fr = rand(Poisson(para.p_fr))
-        while length(pop[i].ac) < number_ac
-            pos_ac = pop[rand(1:1000)]
-            #nicht sich selber als Bekannter haben, außerdem keine Duplikate
-            if pos_ac != pop[i] && !(pos_ac in pop[i].parents) && !(pos_ac in pop[i].spouse) && !(pos_ac in pop[i].children) && !(pos_ac in pop[i].ac)
-                push!(pos_ac.ac, pop[i])
-                push!(pop[i].ac, pos_ac)
-            end
-           
-        end
-        while length(pop[i].friends) < number_fr
-            pos_fr = pop[rand(1:1000)]
-            #nicht sich selber als Freund haben, ebenfalls keine Duplikate
-            if pos_fr != pop[i] && !(pos_fr in pop[i].ac) && !(pos_fr in pop[i].parents) && !(pos_fr in pop[i].spouse) && !(pos_fr in pop[i].children) && !(pos_fr in pop[i].friends)
-                push!(pos_fr.friends, pop[i])
-                push!(pop[i].friends, pos_fr)
-            end
-            
-        end
+        findsocial!(pop[i], pop, para)
     end
-
+    
 
     return pop, pop_singles, pop_potentialparents
 end
@@ -717,7 +918,7 @@ function run_sim(sim, para, verbose = false, n_steps = 150)
 
     end
     
-    #consistencycheck!(sim)
+    consistencycheck!(sim)
 
     # return the results (normalized by pop size)
     n = length(sim.pop)
@@ -828,9 +1029,10 @@ function standard!(ther_restriction, fdbck_education, fdbck_income)
     #print_n!(sim)
 end
 
+qual = approximation_rates(100) 
+Plots.plot([qual], labels=["mittlere Abweichung"]) 
 
-#qual = approximation_rates(50) 
-#Plots.plot([qual], labels=["mittlere Abweichung"]) 
+#standard_statistics!(200)
 
 #qual= optimization_current_para(30)
 #Plots.plot([qual], labels=["mittlere Abweichung"]) 
@@ -851,37 +1053,17 @@ end
 
 
 
-df_par_fr, df_par_h, df_h_fr = qual_sensi()
+# df_par_fr, df_par_h, df_h_fr = qual_sensi()
 
 
-temp = subset(df_par_fr, :par => p -> p .== 0.0, :fr => f -> f.< 1)
-temp2 = subset(df_par_fr, :par => p -> p .== 0.05, :fr => f -> f.< 1)
-temp3 = subset(df_par_fr, :par => p -> p .== 0.1, :fr => f -> f.< 1)
-temp4 = subset(df_par_fr, :par => p -> p .== 0.15, :fr => f -> f.< 1)
-temp5 = subset(df_par_fr, :par => p -> p .== 0.2, :fr => f -> f.< 1)
-temp6 = subset(df_par_fr, :par => p -> p .== 0.25, :fr => f -> f.< 1)
-temp7 = subset(df_par_fr, :par => p -> p .== 0.3, :fr => f -> f.< 1)
-temp8 = subset(df_par_fr, :par => p -> p .== 0.35, :fr => f -> f.< 1)
-temp9 = subset(df_par_fr, :par => p -> p .== 0.4, :fr => f -> f.< 1)
-temp10 = subset(df_par_fr, :par => p -> p .== 0.45, :fr => f -> f.< 1)
-temp11 = subset(df_par_fr, :par => p -> p .== 0.5, :fr => f -> f.< 1)
+# plt = data(df_par_fr) * mapping(:fr, :qual, color= :par)
+# draw(plt)
 
+# plt = data(df_par_h) * mapping(:her, :qual, color= :par)
+# draw(plt)
 
-d  = data(temp)  * mapping(:fr)
-d2 = data(temp2) * mapping(:fr)
-d3 = data(temp3) * mapping(:fr)
-d4 = data(temp4) * mapping(:fr)
-d5 = data(temp5) * mapping(:fr)
-d6 = data(temp6) * mapping(:fr)
-d7 = data(temp7) * mapping(:fr)
-d8 = data(temp8) * mapping(:fr)
-d9 = data(temp9) * mapping(:fr)
-d10 = data(temp10) * mapping(:fr)
-d11 = data(temp11) * mapping(:fr)
-
-
-plt = d * mapping(:qual) + d2 * mapping(:qual) + d3 * mapping(:qual) + d4 * mapping(:qual) + d5 * mapping(:qual)+ d6 * mapping(:qual) + d7*mapping(:qual) + d8 * mapping(:qual) + d9*mapping(:qual) + d10 *mapping(:qual) + d11*mapping(:qual)
-draw(plt; axis = axis)
+#plt = data(df_h_fr) * mapping(:fr, :qual, color= :her)
+#draw(plt)
 
 
 
