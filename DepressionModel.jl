@@ -27,6 +27,7 @@ mutable struct SimplePerson
     # warum ein Vector?
     spouse :: Vector{SimplePerson}
     ac :: Vector{SimplePerson}
+    twin :: Vector{SimplePerson}
 
     # age
     age::Int64
@@ -53,15 +54,16 @@ mutable struct SimplePerson
     #length of current depressive episode
     length_dep_episode::Int64
 
-    #number of depressive episodes
+    #number of depressive episodes total and at age 65: important for calibration
     n_dep_episode::Int64
+    n_dep_episode_65::Int64
 
 end
 
 
 # how we construct a person object
-SimplePerson() = SimplePerson([], [], [], [], [], 0, healthy, 0, 0, 0, 0, 0, 0, 0, [], 0, 0)   # default Person is susceptible and has no contacts
-SimplePerson(state) = SimplePerson([], [], [], [], [], 0, state, 0, 0, 0, 0, 0, 0, 0, [], 0, 0)  # default Person has no contacts
+SimplePerson() = SimplePerson([], [], [], [], [], [], 0, healthy, 0, 0, 0, 0, 0, 0, 0, [], 0, 0, 0)   # default Person is susceptible and has no contacts
+SimplePerson(state) = SimplePerson([], [], [], [], [], [], 0, state, 0, 0, 0, 0, 0, 0, 0, [], 0, 0, 0)  # default Person has no contacts
 
 
 # this is a parametric type
@@ -73,6 +75,13 @@ mutable struct Simulation{AGENT}
 
     pop_singles :: Vector{AGENT}
     pop_potentialparents :: Vector{AGENT}
+
+    pop_identical_twins :: Vector{AGENT}
+    pop_fraternal_twins :: Vector{AGENT}
+
+    pop_depressed :: Vector{AGENT}
+    pop_non_depressed :: Vector{AGENT}
+    pop_currently_depressed :: Vector{AGENT}
 
     time::Int64
 end
@@ -117,8 +126,10 @@ function update!(person, sim, para)
     end
 
     person.risk = ratetoprob(rate * person.susceptibility)
-    if rand() < person.risk 
+    if rand() < person.risk && person.age >= 15
         person.state = depressed
+        push!(sim.pop_depressed, person)
+        push!(sim.pop_currently_depressed, person)
     end
   
     #Spontanremmisionen 
@@ -143,7 +154,13 @@ function population_update(person, sim, para)
 
     #Menschen sterben lassen: hier hab ichs noch nicht besser hingekriegt
     if person.age > 80
+        if person.n_dep_episode == 0
+            push!(sim.pop_non_depressed, person)
+        end
         return death(person, sim)
+    end
+    if person.age == 65
+        person.n_dep_episode_65 = person.n_dep_episode
     end
 
     #Menschen ab 18 sind single
@@ -245,6 +262,7 @@ function newkid!(sim, para)
     #SES und susceptibility: gleicher SES wie Eltern aber bisschen andere susceptibility
     newkid.susceptibility =  (para.h * ((parent.susceptibility + parent.spouse[1].susceptibility)/2) + ((1-para.h) * limit(0, rand(Normal(1,para.b)), 50))) 
 
+
     push!(newkid.parents, parent)
     push!(newkid.parents, parent.spouse[1])
     push!(parent.children, newkid)
@@ -267,6 +285,25 @@ function newkid!(sim, para)
         delete!(parent.spouse[1], sim.pop_potentialparents)
     end
         
+    #Ist das neue Kind ein Zwilling?
+    if rand() < para.prob_twins
+        newtwin = SimplePerson()
+
+        socialcircle_twin!(newkid, newtwin)
+
+        if rand() < (1/3)
+            newtwin.susceptibility = newkid.susceptibility
+            push!(sim.pop_identical_twins, newtwin)
+        else
+            newtwin.susceptibility = (para.h * ((parent.susceptibility + parent.spouse[1].susceptibility)/2) + ((1-para.h) * limit(0, rand(Normal(1,para.b)), 50))) 
+            push!(sim.pop_fraternal_twins, newtwin)
+        end
+
+        push!(newkid.twin, newtwin)
+        push!(newtwin.twin, newkid)
+
+        push!(sim.pop, newtwin)
+    end
 
     push!(sim.pop, newkid)
 
@@ -450,6 +487,26 @@ function findsocial!(person, pop, para)
             end
         end
     end            
+end
+
+function socialcircle_twin!(newkid, newtwin)
+
+    for parent in newkid.parents
+        push!(newtwin.parents, parent)
+        push!(parent.children, newtwin)
+    end
+    for friend in newkid.friends
+        push!(newtwin.friends, friend)
+        push!(friend.friends, newtwin)
+    end
+    for ac in newkid.ac
+        push!(newtwin.ac, ac)
+        push!(ac.ac, newtwin)
+    end
+    for person in newkid.rel_socialcircle
+        push!(newtwin.rel_socialcircle, person)
+    end
+
 end
 
 function findsocial_old!(person, pop, para)
@@ -714,6 +771,9 @@ function setup_mixed(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kid
 
     pop_potentialparents = SimplePerson[]
     pop_singles = SimplePerson[]
+    pop_identical_twins = SimplePerson[]
+    pop_fraternal_twins = SimplePerson[]
+
 
 
     for i in eachindex(men)
@@ -840,7 +900,7 @@ function setup_mixed(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kid
     end
     
 
-    return pop, pop_singles, pop_potentialparents
+    return pop, pop_singles, pop_potentialparents, pop_identical_twins, pop_fraternal_twins
 end
 
 function  setup_sim(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
@@ -850,14 +910,19 @@ function  setup_sim(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids
     end
 
     # create a population of agents, fully mixed
-    pop, pop_singles, pop_potentialparents = setup_mixed(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
+    pop, pop_singles, pop_potentialparents, pop_identical_twins, pop_fraternal_twins = setup_mixed(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
 
+    pop_depressed = SimplePerson[]
+    pop_non_depressed = SimplePerson[]
+    pop_currently_depressed = SimplePerson[]
     # create a simulation object with parameter values
-    sim = Simulation(pop, pop_singles, pop_potentialparents, 0)
+    sim = Simulation(pop, pop_singles, pop_potentialparents, pop_identical_twins, pop_fraternal_twins, pop_depressed, pop_non_depressed, pop_currently_depressed, 0)
     sim
 end
 
-function run_sim(sim, para, verbose = false, n_steps = 150)
+function run_sim(sim, para, verbose = false, n_steps = 200)
+    # random point in time to test increased risks 
+    rp = rand(80:(n_steps-30))
     # we keep track of the numbers
     n_depressed = Float64[]
     n_healthy = Float64[]
@@ -881,8 +946,25 @@ function run_sim(sim, para, verbose = false, n_steps = 150)
     c3 = Int64[]
     c4 = Int64[]
 
+    current_risk_parents = 0
+    current_risk_friends = 0
+    current_risk_ac = 0
+    current_risk_children = 0
+    current_risk_spouse = 0
+    pop_t_0_depressed = []
+    pop_t_0_nondep = []
+
+    increased_risk_parents_4 = 0
+    increased_risk_friends_4 = 0
+    increased_risk_ac_4 = 0
+    increased_risk_children_4 = 0
+    increased_risk_spouse_4 = 0
+
+    rr_parents_30 = 0
+
     # simulation steps
     for t in  1:n_steps
+        empty!(sim.pop_currently_depressed)
         update_agents!(sim, para)
         push!(n_depressed, count(p -> p.state == depressed, sim.pop)/length(sim.pop))
         push!(n_healthy, count(p -> p.state == healthy, sim.pop)/length(sim.pop))
@@ -898,6 +980,23 @@ function run_sim(sim, para, verbose = false, n_steps = 150)
         # a bit of output
         if verbose
             println(t, ", ", n_depressed[end], ", ", n_healthy[end])
+        end
+
+        #calculating increased risks
+        if sim.time == rp
+            pop_t_0_depressed = sim.pop_currently_depressed
+            for p in sim.pop
+                if !(p in pop_t_0_depressed)
+                    push!(pop_t_0_nondep, p)
+                end
+            end
+            current_risk_parents, current_risk_friends, current_risk_ac, current_risk_children, current_risk_spouse = currentrisks(sim, pop_t_0_depressed)
+        end
+        if sim.time == (rp + 4) #Zeitabstand im Rosenquist Paper
+            increased_risk_parents_4, increased_risk_friends_4, increased_risk_ac_4, increased_risk_children_4, increased_risk_spouse_4 = increasedrisks(current_risk_parents, current_risk_friends, current_risk_ac, current_risk_children, current_risk_spouse, pop_t_0_depressed, sim)
+        end
+        if sim.time == (rp + 30) #Zeitabstand bei Rasic et al., 2014
+            rr_parents_30 =  rr_par_30(pop_t_0_depressed, pop_t_0_nondep, sim)
         end
         sim.time += 1
 
@@ -918,11 +1017,11 @@ function run_sim(sim, para, verbose = false, n_steps = 150)
 
     end
     
-    consistencycheck!(sim)
+    #consistencycheck!(sim)
 
     # return the results (normalized by pop size)
     n = length(sim.pop)
-    n_depressed, n_healthy , n_depressed_high, n_healthy_high, n_depressed_middle, n_healthy_middle,  n_depressed_low, n_healthy_low, depr_income, health_income, c1, c2, c3, c4
+    n_depressed, n_healthy , n_depressed_high, n_healthy_high, n_depressed_middle, n_healthy_middle,  n_depressed_low, n_healthy_low, depr_income, health_income, c1, c2, c3, c4, increased_risk_parents_4, increased_risk_friends_4, increased_risk_ac_4, increased_risk_children_4, increased_risk_spouse_4, rr_parents_30
 end
 
 function consistencycheck!(sim)
@@ -1016,9 +1115,9 @@ end
 function standard!(ther_restriction, fdbck_education, fdbck_income)
     d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids = pre_setup()
     para = Parameters(ther_restriction = ther_restriction, fdbck_education = fdbck_education, fdbck_income = fdbck_income)
-    sim = setup_sim(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
-    depr, heal, deprhigh, healhigh, deprmiddle, healmiddle, deprlow, heallow, array_depr, array_health, c1, c2, c3, c4 = run_sim(sim, para)
-    printpara!(sim)
+    sim = setup_sim(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids) 
+    n_depressed, n_healthy , n_depressed_high, n_healthy_high, n_depressed_middle, n_healthy_middle,  n_depressed_low, n_healthy_low, depr_income, health_income, c1, c2, c3, c4, increased_risk_parents_4, increased_risk_friends_4, increased_risk_ac_4, increased_risk_children_4, increased_risk_spouse_4, rr_parents_30= run_sim(sim, para)
+    printpara!(sim, n_depressed, n_healthy , n_depressed_high, n_healthy_high, n_depressed_middle, n_healthy_middle,  n_depressed_low, n_healthy_low, depr_income, health_income, c1, c2, c3, c4, increased_risk_parents_4, increased_risk_friends_4, increased_risk_ac_4, increased_risk_children_4, increased_risk_spouse_4, rr_parents_30)
 
     qual_rates_currentsolution = eval_rates_multipleseeds(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids) 
     println("Qualität der aktuellen Lösung: ", qual_rates_currentsolution)
@@ -1027,16 +1126,14 @@ function standard!(ther_restriction, fdbck_education, fdbck_income)
     #Plots.plot([array_depr, array_health], labels = ["depressed: average income" "healthy: average income"])
     #Plots.plot([heal, depr, healhigh, deprhigh, healmiddle, deprmiddle, heallow, deprlow], labels = ["healthy" "depressed" "healthy high ses" "depressed high ses" "healthy middle ses" "depressed middle ses" "healthy low ses" "depressed low ses"])
     #print_n!(sim)
+    
 end
 
-qual = approximation_rates(100) 
-Plots.plot([qual], labels=["mittlere Abweichung"]) 
-
-#standard_statistics!(200)
-
-#qual= optimization_current_para(30)
+#qual = approximation_rr(50) 
 #Plots.plot([qual], labels=["mittlere Abweichung"]) 
 
+qual = approximation_params(50)
+Plots.plot([qual], labels = ["mittlere Abweichung"])
 
 #hier kann sich ein Graph ausgegeben werden, bei dem geschaut wird, wie sich die Qualität der Simulation über den Bereich des Parameters entwickelt
 #mögliche Eingaben= "parent" "friends" "spouse" "child" "ac" "prev" "h"
@@ -1044,12 +1141,15 @@ Plots.plot([qual], labels=["mittlere Abweichung"])
 #qual_h, parameter_field= quality_function_para("h")
 #Plots.plot([qual_h], labels = ["mA h"], x = [parameter_field])
 
+
+#histograms_random_effects!(100)
+
+
+
+
 #standard!(true, false, false)
 
 #sensi!()
-
-
-
 
 
 

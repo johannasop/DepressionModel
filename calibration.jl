@@ -1,36 +1,86 @@
+Base.@kwdef mutable struct Optimalparams
+    prev_12month::Float64 = 7.5
+    prev_15to65::Float64 = 25.0
+
+    h::Float64 = 0.37
+    increased_parents_30::Float64 = 3
+    increased_friends_4::Float64 = 3.59
+    increased_ac_4::Float64 = 1.18
+    increased_spouse_4::Float64 = 0.5
+    
+end
 
 Base.@kwdef mutable struct Optimalrates
 
-    prev::Float64 = 0.08
-    rate_parents::Float64 = 0.24
+    prev::Float64 = 0.075
+    rate_parents::Float64 = 0.26
     rate_friends::Float64=0.32
     rate_ac::Float64=0.16
     rate_spouse::Float64=0.32
     rate_child::Float64=0.24
+    h::Float64 = 0.35
+
+end
+Base.@kwdef mutable struct Optimalrr
+
+    prev::Float64 = 0.075
+    rr_par::Float64 = 2.38
+    rr_fr::Float64 = 4.59
+    rr_ac::Float64 = 1.5
+    rr_sp::Float64 = 1.7
+    rr_ch::Float64 = 2.5
+    h::Float64 = 0.35
+end
+
+function evaluationparams(sim, rr_parents_30, increasedrisk_friends, increasedrisk_ac, increasedrisk_spouse)
+    #Evaluation aller belegten Parameter
+    o = Optimalparams()
+    h, c, e = heritability_calculations(sim)
+
+    return ((o.prev_12month - (ratedep_12month(sim)*100))^2 + (o.prev_15to65 - (deprisk_life_15to65(sim)*100)) + (o.h - h)^2 + (o.increased_parents_30 - rr_parents_30)^2 + (o.increased_friends_4 - increasedrisk_friends)^2 + (o.increased_ac_4 - increasedrisk_ac)^2 + (o.increased_spouse_4 - increasedrisk_spouse)^2 )/7
 
 end
 
-function evaluationrr(sim, data_rr_par, data_rr_fr, data_rr_ac, data_rr_sp, data_rr_ch)
+function evaluationrr(sim)
     #Evaluation der Risk Ratios
     rr_par, rr_fr, rr_ac, rr_sp, rr_ch = toriskratio(sim) 
 
+    o = Optimalrr()
+    h, c, e = heritability_calculations(sim)
     #meansquaredistance
-    return ((data_rr_par - rr_par)^2 + (data_rr_fr - rr_fr)^2 ) /2
+    return ((o.prev - ratedep_12month(sim))^2 + (o.rr_par - rr_par)^2 + (o.rr_fr - rr_fr)^2 + (o.rr_ac - rr_ac)^2 + (o.h - h)^2) /5
 end
 
 function evaluationrates(sim)
     #Evaluation der Raten
     o = Optimalrates()
-    return ((o.prev - ratedep(sim))^2 + (o.rate_parents-ratedep_parents(sim))^2 + (o.rate_friends - ratedep_friends(sim))^2 + (o.rate_ac-ratedep_ac(sim))^2 + (o.rate_child - ratedep_child(sim))^2 + (o.rate_spouse - ratedep_spouse(sim))^2 )/6
+    h, c, e = heritability_calculations(sim)
+    return ((o.prev - ratedep_12month(sim))^2 + (o.rate_parents-ratedep_parents_12month(sim))^2 + (o.rate_friends - ratedep_friends_12month(sim))^2 + (o.rate_ac-ratedep_ac_12month(sim))^2 + (o.h - h)^2)/5
 
+end
+
+
+
+function eval_params_multipleseeds(new_paras, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
+    meanfit = 0.0
+
+    for i=1:5
+        new_paras.seed = 0#rand(1:100)
+        sim = setup_sim(new_paras, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
+        n_depressed, n_healthy , n_depressed_high, n_healthy_high, n_depressed_middle, n_healthy_middle,  n_depressed_low, n_healthy_low, depr_income, health_income, c1, c2, c3, c4, increased_risk_parents_4, increased_risk_friends_4, increased_risk_ac_4, increased_risk_children_4, increased_risk_spouse_4, rr_parents_30 = run_sim(sim, new_paras)
+
+        meanfit = meanfit + evaluationparams(sim, rr_parents_30, increased_risk_friends_4, increased_risk_ac_4, increased_risk_spouse_4)
+
+    end
+
+    return meanfit/5
 end
 
 
 
 
 
-
-function eval_rr_multipleseeds(data_rr_par, data_rr_fr, data_rr_ac, data_rr_sp, data_rr_ch, new_paras, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
+function eval_rr_multipleseeds(new_paras, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
     meanfit = 0.0
 
     for i=1:5
@@ -38,25 +88,24 @@ function eval_rr_multipleseeds(data_rr_par, data_rr_fr, data_rr_ac, data_rr_sp, 
         sim = setup_sim(new_paras, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
         run_sim(sim, new_paras)
 
-        meanfit = meanfit + evaluationrr(sim, data_rr_par, data_rr_fr, data_rr_ac, data_rr_sp, data_rr_ch)
+        meanfit = meanfit + evaluationrr(sim)
     end
 
     return meanfit/5
 end
 
-#for Schleife auf 1 gesetzt weil seed ja eh gleich bleibt
 function eval_rates_multipleseeds(new_paras, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
     meanfit = 0.0
 
-    for i=1:1
-        new_paras.seed = 0 #rand(1:100)
+    for i=1:5
+        new_paras.seed = 0#rand(1:100)
         sim = setup_sim(new_paras, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
         run_sim(sim, new_paras)
 
         meanfit = meanfit + evaluationrates(sim)
     end
 
-    return meanfit
+    return meanfit/5
 end
 
 
@@ -78,8 +127,8 @@ function sensi!()
             for s in seeds
                     para = Parameters(rate_friends = f, rate_parents = p, seed = s)
                     sim = setup_sim(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
-                    depr, heal, deprhigh, healhigh, deprmiddle, healmiddle, deprlow, heallow = run_sim(sim, para)
-                    push!(placeholder, ratedep(sim), ratedep_parents(sim), ratedep_friends(sim), ratedep_ac(sim), ratedep_child(sim), ratedep_spouse(sim))
+                    n_depressed, n_healthy , n_depressed_high, n_healthy_high, n_depressed_middle, n_healthy_middle,  n_depressed_low, n_healthy_low, depr_income, health_income, c1, c2, c3, c4, increased_risk_parents_4, increased_risk_friends_4, increased_risk_ac_4, increased_risk_children_4, increased_risk_spouse_4, rr_parents_30= run_sim(sim, para)
+                    push!(placeholder, ratedep_12month(sim), ratedep_parents_12month(sim), ratedep_friends_12month(sim), ratedep_ac_12month(sim), ratedep_child_12month(sim), ratedep_spouse_12month(sim))
             end
             push!(df, placeholder)
             placeholder = Vector{Float64}(undef, 0)
@@ -107,7 +156,7 @@ function qual_sensi()
             paras = Parameters(rate_parents = parents[i], rate_friends= friends[x], h = 0)
 
             sim = setup_sim(paras, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
-            depr, heal, deprhigh, healhigh, deprmiddle, healmiddle, deprlow, heallow = run_sim(sim, paras)
+            n_depressed, n_healthy , n_depressed_high, n_healthy_high, n_depressed_middle, n_healthy_middle,  n_depressed_low, n_healthy_low, depr_income, health_income, c1, c2, c3, c4, increased_risk_parents_4, increased_risk_friends_4, increased_risk_ac_4, increased_risk_children_4, increased_risk_spouse_4, rr_parents_30 = run_sim(sim, paras)
             push!(df_par_fr, [parents[i] friends[x] 0.0 evaluationrates(sim)])        
         end
     end
@@ -116,7 +165,7 @@ function qual_sensi()
             paras = Parameters(rate_parents = parents[i], h= h[x], rate_friends = 0)
 
             sim = setup_sim(paras, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
-            depr, heal, deprhigh, healhigh, deprmiddle, healmiddle, deprlow, heallow = run_sim(sim, paras)
+            n_depressed, n_healthy , n_depressed_high, n_healthy_high, n_depressed_middle, n_healthy_middle,  n_depressed_low, n_healthy_low, depr_income, health_income, c1, c2, c3, c4, increased_risk_parents_4, increased_risk_friends_4, increased_risk_ac_4, increased_risk_children_4, increased_risk_spouse_4, rr_parents_30 = run_sim(sim, paras)
             push!(df_par_h, [parents[i] 0.0 h[x] evaluationrates(sim)])    
         end
     end
@@ -125,7 +174,7 @@ function qual_sensi()
             paras = Parameters(h = h[i], rate_friends= friends[x], rate_parents = 0)
 
             sim = setup_sim(paras, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
-            depr, heal, deprhigh, healhigh, deprmiddle, healmiddle, deprlow, heallow = run_sim(sim, paras)
+            n_depressed, n_healthy , n_depressed_high, n_healthy_high, n_depressed_middle, n_healthy_middle,  n_depressed_low, n_healthy_low, depr_income, health_income, c1, c2, c3, c4, increased_risk_parents_4, increased_risk_friends_4, increased_risk_ac_4, increased_risk_children_4, increased_risk_spouse_4, rr_parents_30 = run_sim(sim, paras)
             push!(df_h_fr, [0.0 friends[x] h[i] evaluationrates(sim)])    
         end
     end
@@ -135,7 +184,7 @@ end
 
 
 #einfache Approximation an optimale Werte
-
+#redundant noch ändern
 mutable struct Paraqualityrr  
 
     parameters::Parameters
@@ -166,8 +215,58 @@ function paraplusnorm(paras)
 
     return new_paras
 end
+function approximation_params(steps, npoints=600) 
 
-#Achtung hier wird nicht mehr mit mehreren Seeds optimiert sondern Seed bleibt durch eval_rates_multipleseeds immer 0
+    pq_rates = Paraqualityrates[]
+    quality_array = Float64[]
+
+    d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids = pre_setup()
+
+    for i=1:npoints
+	    print(".")
+        new_paras = randpara()
+
+        qual_rates_new_paras = eval_params_multipleseeds(new_paras, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
+
+        push!(pq_rates, Paraqualityrates(new_paras, qual_rates_new_paras))
+    end
+    
+    for i=1:steps
+        sort!(pq_rates, by=p->p.quality)
+
+        push!(quality_array, pq_rates[1].quality)
+        println(pq_rates[1].quality)
+        println(pq_rates[2].quality)
+        println(pq_rates[3].quality)
+        println(last(pq_rates).quality)
+
+
+        for i=1:(npoints ÷ 2)
+            pop!(pq_rates)
+        end
+
+
+        for i=1:(npoints ÷ 2)
+            new_paras_rates = paraplusnorm(pq_rates[trunc(Int64, rand(truncated(Normal(1, npoints/6); lower = 1, upper = npoints ÷ 2
+            )))].parameters)
+
+            qual_rates_new_paras = eval_params_multipleseeds(new_paras_rates, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
+
+            push!(pq_rates, Paraqualityrates(new_paras_rates, qual_rates_new_paras))
+        end
+
+        println("step $i")
+
+    end 
+
+    sort!(pq_rates, by=p->p.quality)
+
+    present_optimalsolution_rates(pq_rates) 
+
+    return quality_array
+
+end
+
 function approximation_rates(steps, npoints=600) 
 
     pq_rates = Paraqualityrates[]
@@ -280,7 +379,7 @@ function approximation_rr(steps, npoints=600)
 	    print(".")
         new_paras = randpara()
 
-        qual_rr_new_paras = eval_rr_multipleseeds(2.5, 3.5, 1.2, 1.2, 1.5, new_paras, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids) 
+        qual_rr_new_paras = eval_rr_multipleseeds(new_paras, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids) 
 
         push!(pq_rr, Paraqualityrr(new_paras, qual_rr_new_paras)) 
     end
@@ -300,10 +399,10 @@ function approximation_rr(steps, npoints=600)
         end
 
         for i=1:(npoints ÷ 2)
-            new_paras_rr = paraplusnorm(pq_rr[trunc(Int64, rand(truncated(Normal(0,100); lower = 1
+            new_paras_rr = paraplusnorm(pq_rr[trunc(Int64, rand(truncated(Normal(0,100); lower = 1 , upper = npoints ÷ 2
             )))].parameters)
 
-            qual_rr_new_paras = eval_rr_multipleseeds(2.5, 3.5, 1.2, 1.2, 1.2, new_paras_rr, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
+            qual_rr_new_paras = eval_rr_multipleseeds(new_paras_rr, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
 
             push!(pq_rr, Paraqualityrr(new_paras_rr, qual_rr_new_paras)) 
         end
@@ -318,17 +417,29 @@ function approximation_rr(steps, npoints=600)
     return quality_array
 
 end
+function present_optimal_solution(pq_rates)
 
+    for i = 1:3
+        d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids = pre_setup()
+        sim= setup_sim(pq_rates[i].parameters, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
+
+        n_depressed, n_healthy , n_depressed_high, n_healthy_high, n_depressed_middle, n_healthy_middle,  n_depressed_low, n_healthy_low, depr_income, health_income, c1, c2, c3, c4, increased_risk_parents_4, increased_risk_friends_4, increased_risk_ac_4, increased_risk_children_4, increased_risk_spouse_4, rr_parents_30 = run_sim(sim, new_paras)
+        println("Die optimalen Parameter sind Folgende: ", pq_rates[i].parameters)
+
+        printpara!(sim, n_depressed, n_healthy , n_depressed_high, n_healthy_high, n_depressed_middle, n_healthy_middle,  n_depressed_low, n_healthy_low, depr_income, health_income, c1, c2, c3, c4, increased_risk_parents_4, increased_risk_friends_4, increased_risk_ac_4, increased_risk_children_4, increased_risk_spouse_4, rr_parents_30)
+    end
+
+end
 function present_optimalsolution_rates(pq_rates)
 
     for i=1:3
         d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids = pre_setup()
 
         sim= setup_sim(pq_rates[i].parameters, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
-        run_sim(sim, pq_rates[i].parameters)
+        n_depressed, n_healthy , n_depressed_high, n_healthy_high, n_depressed_middle, n_healthy_middle,  n_depressed_low, n_healthy_low, depr_income, health_income, c1, c2, c3, c4, increased_risk_parents_4, increased_risk_friends_4, increased_risk_ac_4, increased_risk_children_4, increased_risk_spouse_4, rr_parents_30= run_sim(sim, pq_rates[i].parameters)
 
         println("die Parameter (rates) sind Folgende: ", pq_rates[i].parameters)
-        printpara!(sim)
+        printpara!(sim, n_depressed, n_healthy , n_depressed_high, n_healthy_high, n_depressed_middle, n_healthy_middle,  n_depressed_low, n_healthy_low, depr_income, health_income, c1, c2, c3, c4, increased_risk_parents_4, increased_risk_friends_4, increased_risk_ac_4, increased_risk_children_4, increased_risk_spouse_4, rr_parents_30)
     end
 end
 
@@ -421,10 +532,10 @@ function present_optimalsolution_rr(pq_rr)
     for i=1:3
         d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids = pre_setup()
         sim = setup_sim(pq_rr[i].parameters,d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
-        run_sim(sim, pq_rr[i].parameters)
+        n_depressed, n_healthy , n_depressed_high, n_healthy_high, n_depressed_middle, n_healthy_middle,  n_depressed_low, n_healthy_low, depr_income, health_income, c1, c2, c3, c4, increased_risk_parents_4, increased_risk_friends_4, increased_risk_ac_4, increased_risk_children_4, increased_risk_spouse_4, rr_parents_30= 0run_sim(sim, pq_rr[i].parameters)
 
         println("die Parameter (RR) sind Folgende: ", pq_rr[i].parameters)
-        printpara!(sim)
+        printpara!(sim, n_depressed, n_healthy , n_depressed_high, n_healthy_high, n_depressed_middle, n_healthy_middle,  n_depressed_low, n_healthy_low, depr_income, health_income, c1, c2, c3, c4, increased_risk_parents_4, increased_risk_friends_4, increased_risk_ac_4, increased_risk_children_4, increased_risk_spouse_4, rr_parents_30)
     end
 end
 
