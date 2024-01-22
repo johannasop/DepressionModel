@@ -15,7 +15,7 @@ function deprisk_life_15to65(sim)
 end
 
 function deprisk_life(sim)
-    return length(sim.pop_depressed)/length(sim.pop_non_depressed)
+    return length(sim.pop_depressed)/(length(sim.pop_non_depressed)+length(sim.pop_depressed))
 end
 
 function ratedep_parents_12month(sim)
@@ -291,93 +291,78 @@ function rr_children(sim)
     return ratedep_children_life(sim)/ratedep_nondepchildren_life(sim)
 end
 
+
+mutable struct DeprCounter
+    depr :: Int
+    pop :: Int
+end
+
+DeprCounter() = DeprCounter(0,0)
+
+function count_depr!(ctr, group)
+	for person in group
+		if ! person.alive
+			continue
+		end
+		ctr.pop += 1
+		if person.state == depressed
+			ctr.depr += 1
+		end
+	end
+end
+
+depr_ratio(ctr) = ctr.depr / ctr.pop
+
 #Berechnung der Erhöhung des Risikos! So wie bei Rosenquist et al. (2011)
 #Diese Funktion wird aufgerufen an einem zufälligen Zeitschritt und dann wird vier Jahre später die nächste Funktion aufgerufen, um eine Erhöhung des Risikos zu berechnen
 function currentrisks(sim, pop_t_0)
-    deprcounter_children = 0
-    popcounter_children = 0
-
-    deprcounter_friends = 0
-    popcounter_friends = 0
-
-    deprcounter_spouse = 0
-    popcounter_spouse = 0
-
-    deprcounter_ac = 0
-    popcounter_ac = 0
-
-    deprcounter_parents = 0
-    popcounter_parents = 0
+    ctr_children = DeprCounter()
+    ctr_friends = DeprCounter()
+    ctr_ac = DeprCounter()
+    ctr_parents = DeprCounter()
+    ctr_spouse = DeprCounter()
 
     for p in pop_t_0
-        if length(p.children) > 0
-            counter = count(a->a.state == depressed && a in sim.pop, p.children)
-            deprcounter_children += counter
-            popcounter_children += count(a-> a in sim.pop, p.children)
-        end
-
-        if length(p.friends) > 0
-            counter = count(a->a.state == depressed && a in sim.pop, p.friends)
-            deprcounter_friends += counter
-            popcounter_friends += count(a-> a in sim.pop, p.friends)
-        end
-
-        if length(p.spouse) > 0
-            counter = count(a->a.state == depressed && a in sim.pop, p.spouse)
-            deprcounter_spouse += counter
-            popcounter_spouse += count(a-> a in sim.pop, p.spouse)
-        end
-
-        if length(p.ac) > 0
-            counter = count(a->a.state == depressed && a in sim.pop, p.ac)
-            deprcounter_ac += counter
-            popcounter_ac += count(a-> a in sim.pop, p.ac)
-        end
-
-        if length(p.parents) > 0
-            counter = count(a->a.state == depressed && a in sim.pop, p.parents)
-            deprcounter_parents += counter
-            popcounter_parents += count(a-> a in sim.pop, p.parents)
-        end
+	    count_depr!(ctr_children, p.children)
+	    count_depr!(ctr_friends, p.friends)
+	    count_depr!(ctr_ac, p.ac)
+	    count_depr!(ctr_parents, p.parents)
+	    count_depr!(ctr_spouse, p.spouse)
     end
 
-    return deprcounter_children/popcounter_children, deprcounter_friends/popcounter_friends, deprcounter_ac/popcounter_ac, deprcounter_parents/popcounter_parents, deprcounter_spouse/popcounter_spouse
+    return depr_ratio(ctr_children), depr_ratio(ctr_friends), depr_ratio(ctr_ac), depr_ratio(ctr_parents), depr_ratio(ctr_spouse)
 end
-#increased risk compared to different point in time
-function increasedrisks(former_risk_parents, former_risk_friends, former_risk_ac, former_risk_children, former_risk_spouse, pop_t_0, sim)
-    current_risk_parents, current_risk_friends, current_risk_ac, current_risk_children, current_risk_spouse = currentrisks(sim, pop_t_0)
 
-    return (current_risk_parents/former_risk_parents - 1), (current_risk_friends/former_risk_friends-1), (current_risk_ac/former_risk_ac-1), (current_risk_children/former_risk_children-1), (current_risk_spouse/former_risk_spouse-1)
+
+#increased risk compared to different point in time
+function increasedrisks(former_risk_children, former_risk_friends, former_risk_ac, former_risk_parents, former_risk_spouse, pop_t_0, sim)
+    current_risk_children, current_risk_friends, current_risk_ac, current_risk_parents, current_risk_spouse = currentrisks(sim, pop_t_0)
+
+    return (increased_risk_children_4 = (current_risk_children/former_risk_children - 1), 
+	    increased_risk_friends_4 = (current_risk_friends/former_risk_friends-1), 
+	    increased_risk_ac_4 = (current_risk_ac/former_risk_ac-1), 
+	    increased_risk_parents_4 = (current_risk_parents/former_risk_parents-1), 
+	    increased_risk_spouse_4 = (current_risk_spouse/former_risk_spouse-1))
 end
+
+
 #only for children of parents with depression vs those without depression 30 years later: Rasic et al., 2014
 function rr_par_30(pop_t_0_depressed, pop_t_0_nondep, sim)
-    depkids = 0
-    popkids = 0
-
-    nondepkids = 0
-    nondeppopkids = 0
-    for p in pop_t_0_depressed
-        if length(p.children) > 0 
-            depkids += count(p->p.state==depressed, p.children)
-            popkids += count(p->p in sim.pop, p.children)
+    function rr_par_30(pop_t_0_depressed, pop_t_0_nondep, sim)
+        ctr_depkids = DeprCounter()
+    
+        ctr_nondepkids = DeprCounter()
+    
+        for p in pop_t_0_depressed
+            count_depr!(ctr_depkids, p.children) 
         end
-    end
-    for p in pop_t_0_nondep
-        if length(p.children) > 0 
-            nondepkids += count(p->p.state==depressed, p.children)
-            nondeppopkids += count(p->p in sim.pop, p.children)
+        for p in pop_t_0_nondep
+            count_depr!(ctr_nondepkids, p.children)
         end
+        return depr_ratio(ctr_depkids) / depr_ratio(ctr_nondepkids)
+        #(depkids/popkids)/(nondepkids/nondeppopkids)
     end
-    return (depkids/popkids)/(nondepkids/nondeppopkids)
 end
-
-
-
-
-
-
-
-
 
 #diverse Funktionen zur Auswertung verschiedenster Aspekte des Modells
 
@@ -435,8 +420,8 @@ function comparison_feedback!(ther_restriction)
     d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids = pre_setup()
     para = Parameters(ther_restriction = ther_restriction, fdbck_education = false, fdbck_income = false)
     sim = setup_sim(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kid)
-    n_depressed, n_healthy , n_depressed_high, n_healthy_high, n_depressed_middle, n_healthy_middle,  n_depressed_low, n_healthy_low, depr_income, health_income, c1, c2, c3, c4, increased_risk_parents_4, increased_risk_friends_4, increased_risk_ac_4, increased_risk_children_4, increased_risk_spouse_4, rr_parents_30= run_sim(sim, para)
-    printpara!(sim, n_depressed, n_healthy , n_depressed_high, n_healthy_high, n_depressed_middle, n_healthy_middle,  n_depressed_low, n_healthy_low, depr_income, health_income, c1, c2, c3, c4, increased_risk_parents_4, increased_risk_friends_4, increased_risk_ac_4, increased_risk_children_4, increased_risk_spouse_4, rr_parents_30)
+    results = run_sim(sim, para)
+    printpara!(sim, results)
     c1, c2, c3, c4 = educationlevels(sim)
     println("Level 1: ", c1, " Davon depressiv: ", count(p -> p.state == depressed && p.education == 1, sim.pop), " Prozentual: ", count(p -> p.state == depressed && p.education == 1, sim.pop)/c1*100)
     println("Level 2: ", c2, " Davon depressiv: ", count(p -> p.state == depressed && p.education == 2, sim.pop), " Prozentual: ", count(p -> p.state == depressed && p.education == 2, sim.pop)/c2*100)
@@ -452,8 +437,8 @@ function comparison_feedback!(ther_restriction)
     d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids = pre_setup()
     para = Parameters(ther_restriction = ther_restriction, fdbck_education = true, fdbck_income = false)
     sim = setup_sim(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
-    n_depressed, n_healthy , n_depressed_high, n_healthy_high, n_depressed_middle, n_healthy_middle,  n_depressed_low, n_healthy_low, depr_income, health_income, c1, c2, c3, c4, increased_risk_parents_4, increased_risk_friends_4, increased_risk_ac_4, increased_risk_children_4, increased_risk_spouse_4, rr_parents_30 = run_sim(sim, para)
-    printpara!(sim, n_depressed, n_healthy , n_depressed_high, n_healthy_high, n_depressed_middle, n_healthy_middle,  n_depressed_low, n_healthy_low, depr_income, health_income, c1, c2, c3, c4, increased_risk_parents_4, increased_risk_friends_4, increased_risk_ac_4, increased_risk_children_4, increased_risk_spouse_4, rr_parents_30)  
+    results = run_sim(sim, para)
+    printpara!(sim, results)  
     c1, c2, c3, c4 = educationlevels(sim)
     println("Level 1: ", c1, " Davon depressiv: ", count(p -> p.state == depressed && p.education == 1, sim.pop), " Prozentual: ", count(p -> p.state == depressed && p.education == 1, sim.pop)/c1*100)
     println("Level 2: ", c2, " Davon depressiv: ", count(p -> p.state == depressed && p.education == 2, sim.pop), " Prozentual: ", count(p -> p.state == depressed && p.education == 2, sim.pop)/c2*100)
@@ -469,8 +454,8 @@ function comparison_feedback!(ther_restriction)
     d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids = pre_setup()
     para = Parameters(ther_restriction = ther_restriction, fdbck_education = false, fdbck_income = true)
     sim = setup_sim(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
-    n_depressed, n_healthy , n_depressed_high, n_healthy_high, n_depressed_middle, n_healthy_middle,  n_depressed_low, n_healthy_low, depr_income, health_income, c1, c2, c3, c4, increased_risk_parents_4, increased_risk_friends_4, increased_risk_ac_4, increased_risk_children_4, increased_risk_spouse_4, rr_parents_30 = run_sim(sim, para)
-    printpara!(sim, n_depressed, n_healthy , n_depressed_high, n_healthy_high, n_depressed_middle, n_healthy_middle,  n_depressed_low, n_healthy_low, depr_income, health_income, c1, c2, c3, c4, increased_risk_parents_4, increased_risk_friends_4, increased_risk_ac_4, increased_risk_children_4, increased_risk_spouse_4, rr_parents_30) 
+    results = run_sim(sim, para)
+    printpara!(sim, results) 
     c1, c2, c3, c4 = educationlevels(sim)
     println("Level 1: ", c1, " Davon depressiv: ", count(p -> p.state == depressed && p.education == 1, sim.pop), " Prozentual: ", count(p -> p.state == depressed && p.education == 1, sim.pop)/c1*100)
     println("Level 2: ", c2, " Davon depressiv: ", count(p -> p.state == depressed && p.education == 2, sim.pop), " Prozentual: ", count(p -> p.state == depressed && p.education == 2, sim.pop)/c2*100)
@@ -486,8 +471,8 @@ function comparison_feedback!(ther_restriction)
     d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids = pre_setup()
     para = Parameters(ther_restriction = ther_restriction, fdbck_education = true, fdbck_income = true)
     sim = setup_sim(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
-    n_depressed, n_healthy , n_depressed_high, n_healthy_high, n_depressed_middle, n_healthy_middle,  n_depressed_low, n_healthy_low, depr_income, health_income, c1, c2, c3, c4, increased_risk_parents_4, increased_risk_friends_4, increased_risk_ac_4, increased_risk_children_4, increased_risk_spouse_4, rr_parents_30 = run_sim(sim, para)
-    printpara!(sim, n_depressed, n_healthy , n_depressed_high, n_healthy_high, n_depressed_middle, n_healthy_middle,  n_depressed_low, n_healthy_low, depr_income, health_income, c1, c2, c3, c4, increased_risk_parents_4, increased_risk_friends_4, increased_risk_ac_4, increased_risk_children_4, increased_risk_spouse_4, rr_parents_30)  
+    results = run_sim(sim, para)
+    printpara!(sim, results)  
     c1, c2, c3, c4 = educationlevels(sim)
     println("Level 1: ", c1, " Davon depressiv: ", count(p -> p.state == depressed && p.education == 1, sim.pop), " Prozentual: ", count(p -> p.state == depressed && p.education == 1, sim.pop)/c1 *100)
     println("Level 2: ", c2, " Davon depressiv: ", count(p -> p.state == depressed && p.education == 2, sim.pop), " Prozentual: ", count(p -> p.state == depressed && p.education == 2, sim.pop)/c2 *100)
@@ -653,12 +638,14 @@ function params_with_multipleseeds(ther_restriction, fdbck_education, fdbck_inco
     return qual_array, rand_qual_array
 end
 
-function printpara!(sim, n_depressed, n_healthy , n_depressed_high, n_healthy_high, n_depressed_middle, n_healthy_middle,  n_depressed_low, n_healthy_low, depr_income, health_income, c1, c2, c3, c4, increased_risk_parents_4, increased_risk_friends_4, increased_risk_ac_4, increased_risk_children_4, increased_risk_spouse_4, rr_parents_30)
+
+
+function printpara!(sim, results)
     println("Zielparameter: ", Optimalparams())
 
     println( "** prev (12 months): ", ratedep_12month(sim) )
     println( "lifetime risk of depression: ", deprisk_life(sim))
-    println( "** risk of depression between 15 and 64: ", deprisk_life_15to65(sim))
+    println( "** risk of depression between 15 and 65: ", deprisk_life_15to65(sim))
     println(" ")
     println( "prev parents (12 months): ", ratedep_parents_12month(sim) )
     println( "prev parents (life): ", ratedep_parents_life(sim) )
@@ -678,17 +665,17 @@ function printpara!(sim, n_depressed, n_healthy , n_depressed_high, n_healthy_hi
     println( "avg risk ", averagerisk(sim))
     println(" ")
     println("risk ratio parents: ", rr_parents(sim))
-    println("** risk ratio parents 30 years later: ", rr_parents_30)
+    println("** risk ratio parents 30 years later: ", results.rr_parents_30)
     println("risk ratio friends: ", rr_friends(sim))
     println("risk ratio ac: ", rr_ac(sim))
     println("risk ratio spouse: ", rr_spouse(sim))
     println("risk ratio children: ", rr_children(sim))
     println(" ")
-    println("increased risk if parent is depressed 4 years later: ", increased_risk_parents_4)
-    println("** increased risk if friend is depressed 4 years later: ", increased_risk_friends_4)
-    println("** increased risk if ac is depressed 4 years later: ", increased_risk_ac_4)
-    println("** increased risk if spouse is depressed 4 years later: ", increased_risk_spouse_4)
-    println("increased risk if child is depressed 4 years later: ", increased_risk_children_4)
+    println("increased risk if parent is depressed 4 years later: ", results.increased_risk_parents_4)
+    println("** increased risk if friend is depressed 4 years later: ", results.increased_risk_friends_4)
+    println("** increased risk if ac is depressed 4 years later: ", results.increased_risk_ac_4)
+    println("** increased risk if spouse is depressed 4 years later: ", results.increased_risk_spouse_4)
+    println("increased risk if child is depressed 4 years later: ", results.increased_risk_children_4)
     println(" ")
     h, c, e = heritability_calculations(sim)
     println("Heritabilitätsschätzer: ")
@@ -715,12 +702,12 @@ function standard_statistics(steps)
     d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids = pre_setup()
     para = Parameters()
     sim = setup_sim(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
-    n_depressed, n_healthy , n_depressed_high, n_healthy_high, n_depressed_middle, n_healthy_middle,  n_depressed_low, n_healthy_low, depr_income, health_income, c1, c2, c3, c4, increased_risk_parents_4, increased_risk_friends_4, increased_risk_ac_4, increased_risk_children_4, increased_risk_spouse_4, rr_parents_30 = run_sim(sim, para)
+    results = run_sim(sim, para)
 
 
     for i=1:steps
 
-        n_depressed, n_healthy , n_depressed_high, n_healthy_high, n_depressed_middle, n_healthy_middle,  n_depressed_low, n_healthy_low, depr_income, health_income, c1, c2, c3, c4, increased_risk_parents_4, increased_risk_friends_4, increased_risk_ac_4, increased_risk_children_4, increased_risk_spouse_4, rr_parents_30 = run_sim(sim, para)
+        results = run_sim(sim, para)
 
         # push!(prev, ratedep_12month(sim))
         # push!(prev_parents, ratedep_parents_12month(sim))
@@ -781,29 +768,36 @@ function standard_statistics(steps)
 end
 
 function rand_statistics(steps)
-      # prev = Float64[]
+    prev = Float64[]
+    prev15_65 = Float64[]
+    rr_30_par = Float64[]
+    rr_4_fr = Float64[]
+    rr_4_ac = Float64[]
+    rr_4_sp = Float64[]
+    h = Float64[]
+
     # prev_parents = Float64[]
     # prev_friends = Float64[]
     # prev_ac = Float64[]
     # prev_kids = Float64[]
     # prev_spouse = Float64[]
     # avg_risk = Float64[]
-    # qual = Float64[]
+    qual = Float64[]
     q = 0
 
-    df_all_params = DataFrame(prev = [], prev_parents = [], prev_friends = [], prev_ac = [], prev_kids = [], prev_spouse = [], avg_risk = [], qual = [])
+    rr_parents_30 = 0
+    increased_risk_friends_4 = 0 
+    increased_risk_spouse_4 = 0 
+    increased_risk_ac_4= 0
 
-
+    df_all_params = DataFrame(prev = [], prev15_65 = [], rr_30_par = [], rr_4_fr = [], rr_4_ac = [], rr_4_sp = [], h = [], qual = [])
+  
     d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids = pre_setup()
     para = Parameters()
     sim = setup_sim(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
-    n_depressed, n_healthy , n_depressed_high, n_healthy_high, n_depressed_middle, n_healthy_middle,  n_depressed_low, n_healthy_low, depr_income, health_income, c1, c2, c3, c4, increased_risk_parents_4, increased_risk_friends_4, increased_risk_ac_4, increased_risk_children_4, increased_risk_spouse_4, rr_parents_30 = run_sim(sim, para)
-
 
     for i=1:steps
-
-        n_depressed, n_healthy , n_depressed_high, n_healthy_high, n_depressed_middle, n_healthy_middle,  n_depressed_low, n_healthy_low, depr_income, health_income, c1, c2, c3, c4, increased_risk_parents_4, increased_risk_friends_4, increased_risk_ac_4, increased_risk_children_4, increased_risk_spouse_4, rr_parents_30 = run_sim(sim, para)
-
+        results = run_sim(sim, para)
         # push!(prev, ratedep_12month(sim))
         # push!(prev_parents, ratedep_parents_12month(sim))
         # push!(prev_friends, ratedep_friends_12month(sim))
@@ -811,10 +805,11 @@ function rand_statistics(steps)
         # push!(prev_kids, ratedep_child_12month(sim))
         # push!(prev_spouse, ratedep_spouse_12month(sim))
         # push!(avg_risk, averagerisk(sim))
-        q =  eval_rates_multipleseeds(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
+        
+        q =  eval_params_multipleseeds(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
         # push!(qual, q)
-
-        push!(df_all_params, [round(ratedep_12month(sim), digits = 2) round(ratedep_parents_12month(sim), digits = 2) round(ratedep_friends_12month(sim), digits = 2) round(ratedep_ac_12month(sim), digits = 2) round(ratedep_child_12month(sim), digits = 2) round(ratedep_spouse_12month(sim), digits = 2) round(averagerisk(sim), digits = 2) round(q, digits = 5)])        
+        h,c,e = heritability_calculations(sim)
+        push!(df_all_params, [round(ratedep_12month(sim), digits = 2) round(deprisk_life_15to65(sim), digits = 2) round(rr_parents_30, digits = 2) round(increased_risk_friends_4, digits = 2) round(increased_risk_ac_4, digits = 2) round(increased_risk_spouse_4, digits = 2) round(h, digits = 2) round(q, digits = 5)])        
 
         print("+")
     end
@@ -870,26 +865,26 @@ function histograms_random_effects!(steps)
     prev_frequency = data(df_all_params) * mapping(:prev) * AlgebraOfGraphics.histogram(bins=10)
     draw(prev_frequency)
 
-    prev_par_frequency = data(df_all_params) * mapping(:prev_parents) * AlgebraOfGraphics.histogram(bins=10)
-    draw(prev_par_frequency)
+    # prev_15_65_frequency = data(df_all_params) * mapping(:prev_15_65) * AlgebraOfGraphics.histogram(bins=10)
+    # draw(prev_15_65_frequency)
 
-    prev_fr_frequency = data(df_all_params) * mapping(:prev_friends) * AlgebraOfGraphics.histogram(bins=10)
-    draw(prev_fr_frequency)
+    # prev_rr_4_friends_frequency = data(df_all_params) * mapping(:rr_4_fr) * AlgebraOfGraphics.histogram(bins=10)
+    # draw(prev_rr_4_friends_frequency)
 
-    prev_ac_frequency = data(df_all_params) * mapping(:prev_ac) * AlgebraOfGraphics.histogram(bins=10)
-    draw(prev_ac_frequency)
+    # prev_rr_4_ac_frequency = data(df_all_params) * mapping(:rr_4_ac) * AlgebraOfGraphics.histogram(bins=10)
+    # draw(prev_rr_4_ac_frequency)
 
-    prev_kids_frequency = data(df_all_params) * mapping(:prev_kids) * AlgebraOfGraphics.histogram(bins=10)
-    draw(prev_kids_frequency)
+    # prev_rr_4_spouse_frequency = data(df_all_params) * mapping(:rr_4_sp) * AlgebraOfGraphics.histogram(bins=10)
+    # draw(prev_rr_4_spouse_frequency)
 
-    prev_spouse_frequency = data(df_all_params) * mapping(:prev_spouse) * AlgebraOfGraphics.histogram(bins=10)
-    draw(prev_spouse_frequency)
+    # prev_h_frequency = data(df_all_params) * mapping(:h) * AlgebraOfGraphics.histogram(bins=10)
+    # draw(prev_h_frequency)
 
-    avg_risk_frequency = data(df_all_params) * mapping(:avg_risk) * AlgebraOfGraphics.histogram(bins=10)
-    draw(avg_risk_frequency)
+    # prev_rr_par_30 = data(df_all_params) * mapping(:rr_30_par) * AlgebraOfGraphics.histogram(bins=10)
+    # draw(prev_rr_par_30)
 
-    qual_frequency = data(df_all_params) * mapping(:qual) * AlgebraOfGraphics.histogram(bins=10)
-    draw(qual_frequency)
+    # qual_frequency = data(df_all_params) * mapping(:qual) * AlgebraOfGraphics.histogram(bins=10)
+    # draw(qual_frequency)
 
 end
 function heritability_calculations(sim)

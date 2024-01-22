@@ -2,17 +2,17 @@
 
 Base.@kwdef mutable struct Parameters
 
-    prev::Float64 = 0.042006
+    prev::Float64 = 0.00753
     rem::Float64 = 0.53
     rem_ther::Float64 = 0.45
     avail_high::Float64 = 0.5
     avail_middle::Float64 = 0.2
     avail_low::Float64 = 0.1
     rate_parents::Float64= 0.0
-    rate_friends::Float64 = 2.3427
-    rate_ac::Float64 = 0.0252293
-    rate_child::Float64 = 0.0
-    rate_spouse::Float64 = 0.6610
+    rate_friends::Float64 = 0.0
+    rate_ac::Float64 = 0.0
+    rate_child::Float64 = 0.3446
+    rate_spouse::Float64 = 1.8546
     n::Int64 = 1000
     n_fam::Int64 = 280
     p_ac::Float64 = 15
@@ -20,10 +20,10 @@ Base.@kwdef mutable struct Parameters
     seed::Int64 = 0
 
     #Breite der Verteilung der susceptibility
-    b::Float64 = 4.7
+    b::Float64 = 4.958
 
     #Heritabilitätsindex(?)
-    h::Float64 = 0
+    h::Float64 = 0.0
 
     #Wahrscheinlichkeiten für unterschiedliche Anzahl von Kindern
     p_none::Float64 = 0.18
@@ -36,8 +36,8 @@ Base.@kwdef mutable struct Parameters
     durations::Vector{Int64} = [3, 7, 15]
 
     #Nummer neuer enger Freunde und weniger enger Freunde pro Jahr
-    new_ac_year::Int64 = 2
-    p_new_friend_year::Float64 = 0.2
+    new_ac_year::Int64 = 1
+    p_new_friend_year::Float64 = 0.1
     friendloss::Float64 = 0.10
     acloss::Float64 = 0.30
 

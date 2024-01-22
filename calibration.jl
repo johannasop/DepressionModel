@@ -37,7 +37,7 @@ function evaluationparams(sim, rr_parents_30, increasedrisk_friends, increasedri
     o = Optimalparams()
     h, c, e = heritability_calculations(sim)
 
-    return ((o.prev_12month - (ratedep_12month(sim)*100))^2 + (o.prev_15to65 - (deprisk_life_15to65(sim)*100)) + (o.h - h)^2 + (o.increased_parents_30 - rr_parents_30)^2 + (o.increased_friends_4 - increasedrisk_friends)^2 + (o.increased_ac_4 - increasedrisk_ac)^2 + (o.increased_spouse_4 - increasedrisk_spouse)^2 )/7
+    return ((o.prev_12month - (ratedep_12month(sim)*100))^2 + (o.prev_15to65 - (deprisk_life_15to65(sim)*100))^2 + (o.h - h)^2 + (o.increased_parents_30 - rr_parents_30)^2 + (o.increased_friends_4 - increasedrisk_friends)^2 + (o.increased_ac_4 - increasedrisk_ac)^2 + (o.increased_spouse_4 - increasedrisk_spouse)^2 )/7
 
 end
 
@@ -67,9 +67,8 @@ function eval_params_multipleseeds(new_paras, d_sum_m, d_sum_f, d_sum_kids, data
     for i=1:5
         new_paras.seed = 0#rand(1:100)
         sim = setup_sim(new_paras, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
-        n_depressed, n_healthy , n_depressed_high, n_healthy_high, n_depressed_middle, n_healthy_middle,  n_depressed_low, n_healthy_low, depr_income, health_income, c1, c2, c3, c4, increased_risk_parents_4, increased_risk_friends_4, increased_risk_ac_4, increased_risk_children_4, increased_risk_spouse_4, rr_parents_30 = run_sim(sim, new_paras)
-
-        meanfit = meanfit + evaluationparams(sim, rr_parents_30, increased_risk_friends_4, increased_risk_ac_4, increased_risk_spouse_4)
+        results = run_sim(sim, new_paras)
+        meanfit = meanfit + evaluationparams(sim, results.rr_parents_30, results.increased_risk_friends_4, results.increased_risk_ac_4, results.increased_risk_spouse_4)
 
     end
 
@@ -127,7 +126,7 @@ function sensi!()
             for s in seeds
                     para = Parameters(rate_friends = f, rate_parents = p, seed = s)
                     sim = setup_sim(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
-                    n_depressed, n_healthy , n_depressed_high, n_healthy_high, n_depressed_middle, n_healthy_middle,  n_depressed_low, n_healthy_low, depr_income, health_income, c1, c2, c3, c4, increased_risk_parents_4, increased_risk_friends_4, increased_risk_ac_4, increased_risk_children_4, increased_risk_spouse_4, rr_parents_30= run_sim(sim, para)
+                    results= run_sim(sim, para)
                     push!(placeholder, ratedep_12month(sim), ratedep_parents_12month(sim), ratedep_friends_12month(sim), ratedep_ac_12month(sim), ratedep_child_12month(sim), ratedep_spouse_12month(sim))
             end
             push!(df, placeholder)
@@ -156,7 +155,7 @@ function qual_sensi()
             paras = Parameters(rate_parents = parents[i], rate_friends= friends[x], h = 0)
 
             sim = setup_sim(paras, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
-            n_depressed, n_healthy , n_depressed_high, n_healthy_high, n_depressed_middle, n_healthy_middle,  n_depressed_low, n_healthy_low, depr_income, health_income, c1, c2, c3, c4, increased_risk_parents_4, increased_risk_friends_4, increased_risk_ac_4, increased_risk_children_4, increased_risk_spouse_4, rr_parents_30 = run_sim(sim, paras)
+            results = run_sim(sim, paras)
             push!(df_par_fr, [parents[i] friends[x] 0.0 evaluationrates(sim)])        
         end
     end
@@ -165,7 +164,7 @@ function qual_sensi()
             paras = Parameters(rate_parents = parents[i], h= h[x], rate_friends = 0)
 
             sim = setup_sim(paras, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
-            n_depressed, n_healthy , n_depressed_high, n_healthy_high, n_depressed_middle, n_healthy_middle,  n_depressed_low, n_healthy_low, depr_income, health_income, c1, c2, c3, c4, increased_risk_parents_4, increased_risk_friends_4, increased_risk_ac_4, increased_risk_children_4, increased_risk_spouse_4, rr_parents_30 = run_sim(sim, paras)
+            results = run_sim(sim, paras)
             push!(df_par_h, [parents[i] 0.0 h[x] evaluationrates(sim)])    
         end
     end
@@ -174,7 +173,7 @@ function qual_sensi()
             paras = Parameters(h = h[i], rate_friends= friends[x], rate_parents = 0)
 
             sim = setup_sim(paras, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
-            n_depressed, n_healthy , n_depressed_high, n_healthy_high, n_depressed_middle, n_healthy_middle,  n_depressed_low, n_healthy_low, depr_income, health_income, c1, c2, c3, c4, increased_risk_parents_4, increased_risk_friends_4, increased_risk_ac_4, increased_risk_children_4, increased_risk_spouse_4, rr_parents_30 = run_sim(sim, paras)
+            results = run_sim(sim, paras)
             push!(df_h_fr, [0.0 friends[x] h[i] evaluationrates(sim)])    
         end
     end
@@ -423,10 +422,10 @@ function present_optimal_solution(pq_rates)
         d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids = pre_setup()
         sim= setup_sim(pq_rates[i].parameters, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
 
-        n_depressed, n_healthy , n_depressed_high, n_healthy_high, n_depressed_middle, n_healthy_middle,  n_depressed_low, n_healthy_low, depr_income, health_income, c1, c2, c3, c4, increased_risk_parents_4, increased_risk_friends_4, increased_risk_ac_4, increased_risk_children_4, increased_risk_spouse_4, rr_parents_30 = run_sim(sim, new_paras)
+        results = run_sim(sim, new_paras)
         println("Die optimalen Parameter sind Folgende: ", pq_rates[i].parameters)
 
-        printpara!(sim, n_depressed, n_healthy , n_depressed_high, n_healthy_high, n_depressed_middle, n_healthy_middle,  n_depressed_low, n_healthy_low, depr_income, health_income, c1, c2, c3, c4, increased_risk_parents_4, increased_risk_friends_4, increased_risk_ac_4, increased_risk_children_4, increased_risk_spouse_4, rr_parents_30)
+        printpara!(sim, results)
     end
 
 end
@@ -436,10 +435,10 @@ function present_optimalsolution_rates(pq_rates)
         d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids = pre_setup()
 
         sim= setup_sim(pq_rates[i].parameters, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
-        n_depressed, n_healthy , n_depressed_high, n_healthy_high, n_depressed_middle, n_healthy_middle,  n_depressed_low, n_healthy_low, depr_income, health_income, c1, c2, c3, c4, increased_risk_parents_4, increased_risk_friends_4, increased_risk_ac_4, increased_risk_children_4, increased_risk_spouse_4, rr_parents_30= run_sim(sim, pq_rates[i].parameters)
+        results= run_sim(sim, pq_rates[i].parameters)
 
         println("die Parameter (rates) sind Folgende: ", pq_rates[i].parameters)
-        printpara!(sim, n_depressed, n_healthy , n_depressed_high, n_healthy_high, n_depressed_middle, n_healthy_middle,  n_depressed_low, n_healthy_low, depr_income, health_income, c1, c2, c3, c4, increased_risk_parents_4, increased_risk_friends_4, increased_risk_ac_4, increased_risk_children_4, increased_risk_spouse_4, rr_parents_30)
+        printpara!(sim, results)
     end
 end
 
@@ -532,10 +531,10 @@ function present_optimalsolution_rr(pq_rr)
     for i=1:3
         d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids = pre_setup()
         sim = setup_sim(pq_rr[i].parameters,d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
-        n_depressed, n_healthy , n_depressed_high, n_healthy_high, n_depressed_middle, n_healthy_middle,  n_depressed_low, n_healthy_low, depr_income, health_income, c1, c2, c3, c4, increased_risk_parents_4, increased_risk_friends_4, increased_risk_ac_4, increased_risk_children_4, increased_risk_spouse_4, rr_parents_30= 0run_sim(sim, pq_rr[i].parameters)
+        results= 0run_sim(sim, pq_rr[i].parameters)
 
         println("die Parameter (RR) sind Folgende: ", pq_rr[i].parameters)
-        printpara!(sim, n_depressed, n_healthy , n_depressed_high, n_healthy_high, n_depressed_middle, n_healthy_middle,  n_depressed_low, n_healthy_low, depr_income, health_income, c1, c2, c3, c4, increased_risk_parents_4, increased_risk_friends_4, increased_risk_ac_4, increased_risk_children_4, increased_risk_spouse_4, rr_parents_30)
+        printpara!(sim, results)
     end
 end
 
