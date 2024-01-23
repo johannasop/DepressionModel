@@ -323,7 +323,7 @@ function death!(person, sim)
         del_unsorted!(person, friend.friends)
     end
 
-    if ac in person.ac
+    for ac in person.ac
         del_unsorted!(person, ac.ac)     
     end
     

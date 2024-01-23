@@ -171,8 +171,8 @@ end
 #qual = approximation_rr(50) 
 #Plots.plot([qual], labels=["mittlere Abweichung"]) 
 
-#qual = approximation_params(60)
-#Plots.plot([qual], labels = ["mittlere Abweichung"])
+qual = approximation_params(50)
+Plots.plot([qual], labels = ["mittlere Abweichung"])
 
 #hier kann sich ein Graph ausgegeben werden, bei dem geschaut wird, wie sich die Qualität der Simulation über den Bereich des Parameters entwickelt
 #mögliche Eingaben= "parent" "friends" "spouse" "child" "ac" "prev" "h"
@@ -181,7 +181,7 @@ end
 #Plots.plot([qual_h], labels = ["mA h"], x = [parameter_field])
 
 
-histograms_random_effects!(200)
+#histograms_random_effects!(200)
 
 
 

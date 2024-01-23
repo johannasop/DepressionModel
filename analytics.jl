@@ -338,31 +338,30 @@ end
 function increasedrisks(former_risk_children, former_risk_friends, former_risk_ac, former_risk_parents, former_risk_spouse, pop_t_0, sim)
     current_risk_children, current_risk_friends, current_risk_ac, current_risk_parents, current_risk_spouse = currentrisks(sim, pop_t_0)
 
-    return (increased_risk_children_4 = (current_risk_children/former_risk_children - 1), 
+    return (increased_risk_parents_4 = (current_risk_children/former_risk_children - 1), 
 	    increased_risk_friends_4 = (current_risk_friends/former_risk_friends-1), 
 	    increased_risk_ac_4 = (current_risk_ac/former_risk_ac-1), 
-	    increased_risk_parents_4 = (current_risk_parents/former_risk_parents-1), 
+	    increased_risk_children_4 = (current_risk_parents/former_risk_parents-1), 
 	    increased_risk_spouse_4 = (current_risk_spouse/former_risk_spouse-1))
 end
 
 
 #only for children of parents with depression vs those without depression 30 years later: Rasic et al., 2014
 function rr_par_30(pop_t_0_depressed, pop_t_0_nondep, sim)
-    function rr_par_30(pop_t_0_depressed, pop_t_0_nondep, sim)
-        ctr_depkids = DeprCounter()
-    
-        ctr_nondepkids = DeprCounter()
-    
-        for p in pop_t_0_depressed
-            count_depr!(ctr_depkids, p.children) 
-        end
-        for p in pop_t_0_nondep
-            count_depr!(ctr_nondepkids, p.children)
-        end
-        return depr_ratio(ctr_depkids) / depr_ratio(ctr_nondepkids)
-        #(depkids/popkids)/(nondepkids/nondeppopkids)
+    ctr_depkids = DeprCounter()
+
+    ctr_nondepkids = DeprCounter()
+
+    for p in pop_t_0_depressed
+        count_depr!(ctr_depkids, p.children) 
     end
+    for p in pop_t_0_nondep
+        count_depr!(ctr_nondepkids, p.children)
+    end
+    return depr_ratio(ctr_depkids) / depr_ratio(ctr_nondepkids)
+    #(depkids/popkids)/(nondepkids/nondeppopkids)
 end
+
 
 #diverse Funktionen zur Auswertung verschiedenster Aspekte des Modells
 
