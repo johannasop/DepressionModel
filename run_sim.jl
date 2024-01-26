@@ -34,6 +34,12 @@ function run_sim(sim, para, verbose = false, n_steps = 200)
     pop_t_0_depressed = []
     pop_t_0_nondep = []
 
+    par_t0 = SimplePerson[]
+    fr_t0 = SimplePerson[]
+    ac_t0 = SimplePerson[]
+    sp_t0 = SimplePerson[]
+    ch_t0 = SimplePerson[]
+
     current_risk_results = (0.0, 0.0, 0.0, 0.0, 0.0)
 
     increased_risk_results = (0.0, 0.0, 0.0, 0.0, 0.0)
@@ -62,18 +68,21 @@ function run_sim(sim, para, verbose = false, n_steps = 200)
 
         #calculating increased risks
         if sim.time == rp
-            pop_t_0_depressed = sim.pop_currently_depressed
+            pop_t_0_depressed = copy(sim.pop_currently_depressed)
+            par_t0, fr_t0, ac_t0, sp_t0, ch_t0 = contacts_t0(pop_t_0_depressed)
+
             for p in sim.pop
                 if !(p in pop_t_0_depressed)
                     push!(pop_t_0_nondep, p)
                 end
             end
-            current_risk_results = currentrisks(sim, pop_t_0_depressed)
+
+            current_risk_results = currentrisks_t0(sim, pop_t_0_depressed)
         end
         if sim.time == (rp + 4) #Zeitabstand im Rosenquist Paper
-            increased_risk_results = increasedrisks(current_risk_results..., pop_t_0_depressed, sim)
+            increased_risk_results = increasedrisks(current_risk_results..., par_t0, fr_t0, ac_t0, sp_t0, ch_t0, sim)
         end
-        if sim.time == (rp + 30) #Zeitabstand bei Rasic et al., 2014
+        if sim.time == (rp + 30) #Zeitabstand bei Rasic et al., 2014 und  RR nicht im zeitlichen Vergleich sondern im Vergleich zu Kinder nichtdepressiver Eltern
             rr_parents_30 =  rr_par_30(pop_t_0_depressed, pop_t_0_nondep, sim)
         end
         sim.time += 1
@@ -96,7 +105,6 @@ function run_sim(sim, para, verbose = false, n_steps = 200)
     end
 
     #consistencycheck!(sim)
-
     # return the results (normalized by pop size)
     n = length(sim.pop)
     (; n_depressed, n_healthy , n_depressed_high, n_healthy_high, n_depressed_middle, n_healthy_middle,  n_depressed_low, n_healthy_low, depr_income, health_income, c1, c2, c3, c4, increased_risk_results..., rr_parents_30)
@@ -114,16 +122,101 @@ function standard!(ther_restriction, fdbck_education, fdbck_income, seed = 0)
 
     printpara!(sim, results)
 
-    qual_rates_currentsolution = eval_rates_multipleseeds(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids) 
+    qualcurrentsolution = eval_params_multipleseeds(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids) 
 
-    println("Qualität der aktuellen Lösung: ", qual_rates_currentsolution)
+    println("Qualität der aktuellen Lösung: ", qualcurrentsolution)
 
+    #printgraph!(sim)
     #Plots.plot([c1, c2, c3, c4], labels =["1" "2" "3" "4"])
     #Plots.plot([array_depr, array_health], labels = ["depressed: average income" "healthy: average income"])
     #Plots.plot([heal, depr, healhigh, deprhigh, healmiddle, deprmiddle, heallow, deprlow], labels = ["healthy" "depressed" "healthy high ses" "depressed high ses" "healthy middle ses" "depressed middle ses" "healthy low ses" "depressed low ses"])
     #print_n!(sim)
 
 end
+
+function test!()
+    liste = []
+    for i = 1:10
+        push!(liste, SimplePerson())
+    end
+
+    liste[1].state = depressed
+    liste[1].n_dep_episode = 1
+    liste[5].state = depressed
+    liste[5].n_dep_episode = 1
+    liste[10].state = depressed
+    liste[10].n_dep_episode = 1
+
+
+
+    #1&3
+    #2&5
+    #7&9
+    #1&10
+
+    add_eachother!(liste[1], liste[1].friends, liste[3], liste[3].friends)
+    add_eachother!(liste[2], liste[2].friends, liste[5], liste[5].friends)
+    add_eachother!(liste[7], liste[7].friends, liste[9], liste[9].friends)
+    add_eachother!(liste[1], liste[1].friends, liste[10], liste[10].friends)
+
+    kopie = deepcopy(liste) 
+
+    liste[9].state = depressed
+    println(kopie[9].state)
+
+    del_unsorted!(liste[5], liste)
+    println(length(kopie))
+
+    add_eachother!(liste[4], liste[4].friends, liste[5], liste[5].friends)
+    println(length(kopie[4].friends))
+
+    print(everdepressed(liste[5]) == everdepressed(liste[1]))
+    print(everdepressed(liste[5]))
+
+    if any(p->everdepressed(p)== everdepressed(liste[5]), liste)
+        print("funktioniert")
+    end
+end
+
+#qual = approximation_rr(50) 
+#Plots.plot([qual], labels=["mittlere Abweichung"]) 
+
+#qual = approximation_params(60)
+#Plots.plot([qual], labels = ["mittlere Abweichung"])
+
+#hier kann sich ein Graph ausgegeben werden, bei dem geschaut wird, wie sich die Qualität der Simulation über den Bereich des Parameters entwickelt
+#mögliche Eingaben= "parent" "friends" "spouse" "child" "ac" "prev" "h"
+#quality_plots!()
+#qual_h, parameter_field= quality_function_para("h")
+#Plots.plot([qual_h], labels = ["mA h"], x = [parameter_field])
+
+#test!()
+
+standard!(true, false, false)
+#histograms_random_effects!(10)
+
+#sensi!()
+
+
+
+# df_par_fr, df_par_h, df_h_fr = qual_sensi()
+
+
+# plt = data(df_par_fr) * mapping(:fr, :qual, color= :par)
+# draw(plt)
+
+# plt = data(df_par_h) * mapping(:her, :qual, color= :par)
+# draw(plt)
+
+#plt = data(df_h_fr) * mapping(:fr, :qual, color= :her)
+#draw(plt)
+
+
+
+#comparison_feedback!(true)
+
+#qual, qual_random = params_with_multipleseeds()
+#Plots.plot([qual, qual_random], labels=["Qualität bei unterschiedlichem Seed: beste Para" "Zufallspara"])
 
 #qual = approximation_rr(50) 
 #Plots.plot([qual], labels=["mittlere Abweichung"]) 
@@ -137,76 +230,3 @@ end
 #qual_h, parameter_field= quality_function_para("h")
 #Plots.plot([qual_h], labels = ["mA h"], x = [parameter_field])
 
-
-#histograms_random_effects!(100)
-
-
-
-
-#standard!(true, false, false)
-
-#sensi!()
-
-
-
-# df_par_fr, df_par_h, df_h_fr = qual_sensi()
-
-
-# plt = data(df_par_fr) * mapping(:fr, :qual, color= :par)
-# draw(plt)
-
-# plt = data(df_par_h) * mapping(:her, :qual, color= :par)
-# draw(plt)
-
-#plt = data(df_h_fr) * mapping(:fr, :qual, color= :her)
-#draw(plt)
-
-
-
-#comparison_feedback!(true)
-
-#qual, qual_random = params_with_multipleseeds()
-#Plots.plot([qual, qual_random], labels=["Qualität bei unterschiedlichem Seed: beste Para" "Zufallspara"])
-
-#qual = approximation_rr(50) 
-#Plots.plot([qual], labels=["mittlere Abweichung"]) 
-
-qual = approximation_params(50)
-Plots.plot([qual], labels = ["mittlere Abweichung"])
-
-#hier kann sich ein Graph ausgegeben werden, bei dem geschaut wird, wie sich die Qualität der Simulation über den Bereich des Parameters entwickelt
-#mögliche Eingaben= "parent" "friends" "spouse" "child" "ac" "prev" "h"
-#quality_plots!()
-#qual_h, parameter_field= quality_function_para("h")
-#Plots.plot([qual_h], labels = ["mA h"], x = [parameter_field])
-
-
-#histograms_random_effects!(200)
-
-
-
-
-#standard!(true, false, false)
-
-#sensi!()
-
-
-
-# df_par_fr, df_par_h, df_h_fr = qual_sensi()
-
-
-# plt = data(df_par_fr) * mapping(:fr, :qual, color= :par)
-# draw(plt)
-
-# plt = data(df_par_h) * mapping(:her, :qual, color= :par)
-# draw(plt)
-
-#plt = data(df_h_fr) * mapping(:fr, :qual, color= :her)
-#draw(plt)
-
-
-
-#comparison_feedback!(true)
-
-#qual, qual_random = params_with_multipleseeds()
-#Plots.plot([qual, qual_random], labels=["Qualität bei unterschiedlichem Seed: beste Para" "Zufallspara"])

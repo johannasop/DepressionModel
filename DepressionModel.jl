@@ -10,6 +10,11 @@ using AlgebraOfGraphics
 using CairoMakie
 using LIBSVM
 using Makie
+using Graphs
+using GraphPlot
+using NetworkLayout
+using Colors
+using Karnak
 
 include("parameters.jl") 
 
@@ -121,7 +126,6 @@ function update!(person, sim, para)
     person.risk = ratetoprob(rate * person.susceptibility)
     if person.age >= 15 && rand() < person.risk
         person.state = depressed
-        #push!(sim.pop_depressed, person) wieder rausgenommen, weil Leute sonst mehrfach auf der Liste stehen, wird jetzt nur einmal am Ende des Lebens aufgrerufen
         push!(sim.pop_currently_depressed, person)
     end
   
@@ -220,6 +224,23 @@ function population_update!(person, sim, para)
     return false
  end
 
+ function add_eachother!(person, plist, other, olist)
+
+    push!(plist, other)
+    push!(olist, person)
+
+ end
+
+ function everdepressed(person)
+
+    if person.n_dep_episode == 0
+        return false
+    else
+        return true
+    end
+
+ end
+
  function set_ses!(person,para)
     parentalincome = max(person.parents[1].income, person.parents[2].income)
 
@@ -257,15 +278,8 @@ function newkid!(sim, para)
     #SES und susceptibility: gleicher SES wie Eltern aber bisschen andere susceptibility
     newkid.susceptibility =  (para.h * ((parent.susceptibility + parent2.susceptibility)/2) + ((1-para.h) * limit(0, rand(Normal(1,para.b)), 50))) 
 
-
-    push!(newkid.parents, parent)
-    push!(newkid.parents, parent2)
-    push!(parent.children, newkid)
-    push!(parent2.children, newkid)
-
-    #neue Menschen brauchen Freunde und Bekannte, das dürfen aber nicht sie selber sein 
-
-    findsocial!(newkid, sim.pop, para)
+    add_eachother!(newkid, newkid.parents, parent, parent.children)
+    add_eachother!(newkid, newkid.parents, parent2, parent2.children)
     
     #werden Eltern gelöscht oder bleiben auf der Liste potentieller Eltern? Außerdem können sie mehr als drei Kinder kriegen
     p = para.p_kids[min(3, length(parent.children))]
@@ -274,6 +288,9 @@ function newkid!(sim, para)
         del_unsorted!(parent, sim.pop_potentialparents)
         del_unsorted!(parent2, sim.pop_potentialparents)
     end
+
+    #neue Menschen brauchen Freunde und Bekannte, das dürfen aber nicht sie selber sein 
+    findsocial!(newkid, sim.pop, para)
         
     #Ist das neue Kind ein Zwilling?
     if rand() < para.prob_twins
@@ -290,8 +307,7 @@ function newkid!(sim, para)
             push!(sim.pop_fraternal_twins, newtwin)
         end
 
-        push!(newkid.twin, newtwin)
-        push!(newtwin.twin, newkid)
+        add_eachother!(newkid, newkid.twin, newtwin, newtwin.twin)
 
         push!(sim.pop, newtwin)
     end
@@ -360,14 +376,12 @@ function newpartner!(person, sim, para)
         end
 
         #Bedingungen: Partner muss single sein, der Altersunterschied darf nicht zu groß sein und der SES muss gleich sein, außerdem dürfen es nicht sie selber sein
-        if length(potpartner.spouse) == 0 && (abs(potpartner.age - person.age) <= 5) && potpartner.education == person.education && potpartner.age >= 18 && potpartner != person && !(potpartner in person.parents) && !(potpartner in person.children)
-
+        if length(potpartner.spouse) == 0 && (abs(potpartner.age - person.age) <= 5+(person.age*0.1)) && potpartner.education == person.education && potpartner.age >= 18 && potpartner != person && !(potpartner in person.parents) && !(potpartner in person.children) && (everdepressed(person) == everdepressed(potpartner))
             #für beide die Beziehungsdauer bestimmen
             person.rellength = rand(Poisson(para.durations[rand(1:length(para.durations))]))
             potpartner.rellength = person.rellength
 
-            push!(person.spouse, potpartner)
-            push!(potpartner.spouse, person)
+            add_eachother!(person, person.spouse, potpartner, potpartner.spouse)
 
             add_to_sc!(person, potpartner)
             add_to_sc!(potpartner, person)
@@ -427,10 +441,10 @@ function findsocial!(person, pop, para)
     number_fr = rand(Poisson(para.p_fr))
 
     while length(person.friends) < number_fr
-        pos_fr = pop[rand(1:length(pop))] 
-        if is_stranger(person, pos_fr)
-            push!(pos_fr.friends, person)
-            push!(person.friends, pos_fr)
+        pos_fr = rand(pop)
+        if is_stranger(person, pos_fr) && (5 + (person.age*0.25) > abs(person.age-pos_fr.age)) 
+            add_eachother!(person, person.friends, pos_fr, pos_fr.friends)
+
             add_to_sc!(person, pos_fr)
             add_to_sc!(pos_fr, person)
 
@@ -443,9 +457,8 @@ function findsocial!(person, pop, para)
         #sollte es keine potenziellen Bekannten mehr im Umkreis geben, oder die Person keine Freunde haben, werden einfach Personen aus der Population ausgewählt
         if length(person.friends) == 0 || length(person.rel_socialcircle) == 0
             pos_ac = rand(pop)
-            if is_stranger(person, pos_ac)
-                push!(pos_ac.ac, person)
-                push!(person.ac, pos_ac)
+            if is_stranger(person, pos_ac) 
+                add_eachother!(person, person.ac, pos_ac, pos_ac.ac)
 
                 del_unsorted!(pos_ac, person.rel_socialcircle)
                 del_unsorted!(person, pos_ac.rel_socialcircle)
@@ -453,8 +466,7 @@ function findsocial!(person, pop, para)
         else
             #folgende Lösung würde die Freunde von Freunden zu Bekannten machen und so noch mehr ein tatsächliches Netzwerk erzeugen
             pos_ac = rand(person.rel_socialcircle)
-            push!(pos_ac.ac, person)
-            push!(person.ac, pos_ac)
+            add_eachother!(person, person.ac, pos_ac, pos_ac.ac)
             del_unsorted!(pos_ac, person.rel_socialcircle)
             del_unsorted!(person, pos_ac.rel_socialcircle)
         end
@@ -464,16 +476,13 @@ end
 function socialcircle_twin!(newkid, newtwin)
 
     for parent in newkid.parents
-        push!(newtwin.parents, parent)
-        push!(parent.children, newtwin)
+        add_eachother!(newtwin, newtwin.parents, parent, parent.children)
     end
     for friend in newkid.friends
-        push!(newtwin.friends, friend)
-        push!(friend.friends, newtwin)
+        add_eachother!(newtwin, newtwin.friends, friend, friend.friends)
     end
     for ac in newkid.ac
-        push!(newtwin.ac, ac)
-        push!(ac.ac, newtwin)
+        add_eachother!(newtwin, newtwin.ac, ac, ac.ac)
     end
     for person in newkid.rel_socialcircle
         push!(newtwin.rel_socialcircle, person)
@@ -488,15 +497,13 @@ function findsocial_old!(person, pop, para)
     while length(person.friends) < number_fr
         pos_fr = pop[rand(1:length(pop))] 
         if pos_fr != person  && !(pos_fr in person.parents) && !(pos_fr in person.spouse) && !(pos_fr in person.children) && !(pos_fr in person.friends)
-            push!(pos_fr.friends, person)
-            push!(person.friends, pos_fr)
+            add_eachother!(person, person.friends, pos_fr, pos_fr.friends)
         end
     end
     while length(person.ac) < number_ac
         pos_ac = pop[rand(1:length(pop))]
         if pos_ac != person && !(pos_ac in person.parents) && !(pos_ac in person.spouse) && !(pos_ac in person.children) && !(pos_ac in person.ac) && !(pos_ac in person.friends)
-            push!(pos_ac.ac, person)
-            push!(person.ac, pos_ac)
+            add_eachother!(person, person.ac, pos_ac, pos_ac.ac)
         end
     end
 end
@@ -513,30 +520,27 @@ function social_dynamic!(person, para, sim)
         del_unsorted!(person, old_ac.ac)
 
         #new ac is picked dependend on depression State
-        if any(p->p.state == person.state, person.rel_socialcircle) 
+        if any(p->everdepressed(p) == everdepressed(person), person.rel_socialcircle) 
             while true
                 pos_ac = rand(person.rel_socialcircle)
 
                 @assert is_stranger(person, pos_ac)
 
-                if pos_ac.state == person.state 
-                    push!(pos_ac.ac, person)
-                    push!(person.ac, pos_ac)
+                if everdepressed(person) == everdepressed(pos_ac) 
+                    add_eachother!(person, person.ac, pos_ac, pos_ac.ac)
                     del_unsorted!(pos_ac, person.rel_socialcircle)
                     del_unsorted!(person, pos_ac.rel_socialcircle)
                     break
-                    end
                 end
+            end
 
-                else
-                    while true
+        else
+            while true
 
-                    pos_ac = rand(sim.pop)
+                pos_ac = rand(sim.pop)
 
-                if is_stranger(person, pos_ac)
-                    push!(pos_ac.ac, person)
-                    push!(person.ac, pos_ac)
-
+                if is_stranger(person, pos_ac) 
+                    add_eachother!(person, person.ac, pos_ac, pos_ac.ac)
                     del_unsorted!(pos_ac, person.rel_socialcircle)
                     del_unsorted!(person, pos_ac.rel_socialcircle)
                     break
@@ -553,13 +557,12 @@ function social_dynamic!(person, para, sim)
         del_unsorted!(person, old_friend.friends)
 
         #new friend is picked dependend on depression State
-        if any(p->p.state == person.state, person.rel_socialcircle) 
+        if any(p-> everdepressed(p) == everdepressed(person), person.rel_socialcircle) 
             while true
                 pos_fr = rand(person.rel_socialcircle)
 
-                if pos_fr.state == person.state
-                    push!(pos_fr.friends, person)
-                    push!(person.friends, pos_fr)
+                if everdepressed(pos_fr) == everdepressed(person)
+                    add_eachother!(person, person.friends, pos_fr, pos_fr.friends)
                     add_to_sc!(person, pos_fr)
                     add_to_sc!(pos_fr, person)
                     del_unsorted!(pos_fr, person.rel_socialcircle)
@@ -567,22 +570,21 @@ function social_dynamic!(person, para, sim)
                     break
                 end
             end
-            else
-                while true
-                    pos_fr = rand(sim.pop)
-    
-                    if is_stranger(person, pos_fr)
-                        push!(pos_fr.friends, person)
-                        push!(person.friends, pos_fr)
-                        add_to_sc!(person, pos_fr)
-                        add_to_sc!(pos_fr, person)
-                        del_unsorted!(pos_fr, person.rel_socialcircle)
-                        del_unsorted!(person, pos_fr.rel_socialcircle)
-                        break
-                    end 
-                
-                end
+        else
+            while true
+                pos_fr = rand(sim.pop)
+
+                if is_stranger(person, pos_fr) && 5+(person.age*0.25)>abs(person.age-pos_fr.age) 
+                    add_eachother!(person, person.friends, pos_fr, pos_fr.friends)
+                    add_to_sc!(person, pos_fr)
+                    add_to_sc!(pos_fr, person)
+                    del_unsorted!(pos_fr, person.rel_socialcircle)
+                    del_unsorted!(person, pos_fr.rel_socialcircle)
+                    break
+                end 
+            
             end
+        end
         end
 
     #mit gewisser Wahrscheinlichkeit verlieren depressive Personen darüber hinaus auch Freunde und Bekannte nach gewisser Zeit; hier ab zweitem Jahr der Depression 

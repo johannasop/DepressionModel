@@ -75,8 +75,7 @@ function setup_mixed(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kid
         while length(man.spouse) < 1
             #als Partner gegenseitig eintragen, wenn Altersunterschied ok ist, anschließend in Population einfügen
             if abs(man.age - woman.age) <= 5
-	            push!(man.spouse, woman)
-                push!(woman.spouse, man)
+                add_eachother!(man, man.spouse, woman, woman.spouse)
                 add_to_sc!(man, woman)
                 add_to_sc!(woman, man)
             else 
@@ -120,12 +119,10 @@ function setup_mixed(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kid
 
 
         push!(pop, kid)
-        push!(kid.parents, parent)
-        push!(parent.children, kid)
+        add_eachother!(parent, parent.children, kid, kid.parents)
 
         #jeweiliger Partner wird als Elternteil eingetragen und bei diesem das Kind gespeichert
-        push!(parent.spouse[1].children, kid)
-        push!(kid.parents, parent.spouse[1])
+        add_eachother!(parent.spouse[1], parent.spouse[1].children, kid, kid.parents)
     end
 
     #finde Paare ohne Kinder und trage sie auf Liste der potentiellen Eltern ein
@@ -151,11 +148,18 @@ function setup_mixed(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kid
     for i in eachindex(pop)
         findsocial!(pop[i], pop, para)
     end
-
+    #findsocial_initial!(sim, para)
 
     return pop, pop_singles, pop_potentialparents, pop_identical_twins, pop_fraternal_twins
 end
 
+
+function findsocial_initial!(sim, para)
+
+    g = random_regular_graph(length(sim.pop), para.p_fr/2) 
+
+
+end
 
 function  setup_sim(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
     # for reproducibility

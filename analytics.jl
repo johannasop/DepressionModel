@@ -315,7 +315,7 @@ depr_ratio(ctr) = ctr.depr / ctr.pop
 
 #Berechnung der Erhöhung des Risikos! So wie bei Rosenquist et al. (2011)
 #Diese Funktion wird aufgerufen an einem zufälligen Zeitschritt und dann wird vier Jahre später die nächste Funktion aufgerufen, um eine Erhöhung des Risikos zu berechnen
-function currentrisks(sim, pop_t_0)
+function currentrisks_t0(sim, pop_t_0)
     ctr_children = DeprCounter()
     ctr_friends = DeprCounter()
     ctr_ac = DeprCounter()
@@ -323,20 +323,65 @@ function currentrisks(sim, pop_t_0)
     ctr_spouse = DeprCounter()
 
     for p in pop_t_0
-	    count_depr!(ctr_children, p.children)
+	    count_depr!(ctr_children, p.parents)
 	    count_depr!(ctr_friends, p.friends)
 	    count_depr!(ctr_ac, p.ac)
-	    count_depr!(ctr_parents, p.parents)
+	    count_depr!(ctr_parents, p.children)
 	    count_depr!(ctr_spouse, p.spouse)
     end
 
     return depr_ratio(ctr_children), depr_ratio(ctr_friends), depr_ratio(ctr_ac), depr_ratio(ctr_parents), depr_ratio(ctr_spouse)
 end
 
+function contacts_t0(pop_t_0)
 
+    fri = SimplePerson[]
+    ac = SimplePerson[]
+    sp = SimplePerson[]
+    ch = SimplePerson[]
+    par = SimplePerson[]
+
+    for p in pop_t_0
+        for parent in p.parents
+            push!(par, parent)
+        end
+        for c in p.children
+            push!(ch, c)
+        end
+        for fr in p.friends
+            push!(fri, fr)
+        end
+        for a in p.ac
+            push!(ac, a)
+        end
+        for s in p.spouse
+            push!(sp, s)
+        end
+    end
+
+    return par, fri, ac, sp, ch
+end
 #increased risk compared to different point in time
-function increasedrisks(former_risk_children, former_risk_friends, former_risk_ac, former_risk_parents, former_risk_spouse, pop_t_0, sim)
-    current_risk_children, current_risk_friends, current_risk_ac, current_risk_parents, current_risk_spouse = currentrisks(sim, pop_t_0)
+function increasedrisks(former_risk_children, former_risk_friends, former_risk_ac, former_risk_parents, former_risk_spouse, par_t0, fri_t0, ac_t0, sp_t0, ch_t0, sim)
+
+    i_ctr_ch = DeprCounter()
+    i_ctr_fr = DeprCounter()
+    i_ctr_ac = DeprCounter()
+    i_ctr_sp = DeprCounter()
+    i_ctr_par = DeprCounter()
+
+    count_depr!(i_ctr_ch, par_t0)
+    count_depr!(i_ctr_fr, fri_t0)
+    count_depr!(i_ctr_ac, ac_t0)
+    count_depr!(i_ctr_sp, sp_t0)
+    count_depr!(i_ctr_par, ch_t0)
+
+    current_risk_parents = depr_ratio(i_ctr_ch)
+    current_risk_friends = depr_ratio(i_ctr_fr)
+    current_risk_ac = depr_ratio(i_ctr_ac)
+    current_risk_spouse = depr_ratio(i_ctr_sp)
+    current_risk_children = depr_ratio(i_ctr_par)
+
 
     return (increased_risk_parents_4 = (current_risk_children/former_risk_children - 1), 
 	    increased_risk_friends_4 = (current_risk_friends/former_risk_friends-1), 
@@ -775,12 +820,6 @@ function rand_statistics(steps)
     rr_4_sp = Float64[]
     h = Float64[]
 
-    # prev_parents = Float64[]
-    # prev_friends = Float64[]
-    # prev_ac = Float64[]
-    # prev_kids = Float64[]
-    # prev_spouse = Float64[]
-    # avg_risk = Float64[]
     qual = Float64[]
     q = 0
 
@@ -795,63 +834,17 @@ function rand_statistics(steps)
     para = Parameters()
     sim = setup_sim(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
 
+
     for i=1:steps
-        results = run_sim(sim, para)
-        # push!(prev, ratedep_12month(sim))
-        # push!(prev_parents, ratedep_parents_12month(sim))
-        # push!(prev_friends, ratedep_friends_12month(sim))
-        # push!(prev_ac, ratedep_ac_12month(sim))
-        # push!(prev_kids, ratedep_child_12month(sim))
-        # push!(prev_spouse, ratedep_spouse_12month(sim))
-        # push!(avg_risk, averagerisk(sim))
+
+        results=run_sim(sim, para)
         
         q =  eval_params_multipleseeds(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
-        # push!(qual, q)
         h,c,e = heritability_calculations(sim)
-        push!(df_all_params, [round(ratedep_12month(sim), digits = 2) round(deprisk_life_15to65(sim), digits = 2) round(rr_parents_30, digits = 2) round(increased_risk_friends_4, digits = 2) round(increased_risk_ac_4, digits = 2) round(increased_risk_spouse_4, digits = 2) round(h, digits = 2) round(q, digits = 5)])        
+        push!(df_all_params, [round(ratedep_12month(sim), digits = 2) round(deprisk_life_15to65(sim), digits = 2) round(results.rr_parents_30, digits = 2) round(results.increased_risk_friends_4, digits = 2) round(results.increased_risk_ac_4, digits = 2) round(results.increased_risk_spouse_4, digits = 2) round(h, digits = 2) round(q, digits = 5)])        
 
         print("+")
     end
-
-    # println("Das Minimum der Prävalenz ist: ", minimum(prev))
-    # println("Das Maximum der Prävalenz ist: ", maximum(prev))
-    # println("Der Durchschnitt der Prävalenz ist: ", mean(prev))
-    # println("Die Varianz der Prävalenz ist: ", var(prev))
-
-    # println("Das Minimum der Prävalenz (Eltern) ist: ", minimum(prev_parents))
-    # println("Das Maximum der Prävalenz (Eltern) ist: ", maximum(prev_parents))
-    # println("Der Durchschnitt der Prävalenz (Eltern) ist: ", mean(prev_parents))
-    # println("Die Varianz der Prävalenz (Eltern) ist: ", var(prev_parents))
-
-    # println("Das Minimum der Prävalenz (Freunde) ist: ", minimum(prev_friends))
-    # println("Das Maximum der Prävalenz (Freunde) ist: ", maximum(prev_friends))
-    # println("Der Durchschnitt der Prävalenz (Freunde) ist: ", mean(prev_friends))
-    # println("Die Varianz der Prävalenz (Freunde) ist: ", var(prev_friends))
-
-    # println("Das Minimum der Prävalenz (ac) ist: ", minimum(prev_ac))
-    # println("Das Maximum der Prävalenz (ac) ist: ", maximum(prev_ac))
-    # println("Der Durchschnitt der Prävalenz (ac) ist: ", mean(prev_ac))
-    # println("Die Varianz der Prävalenz (ac) ist: ", var(prev_ac))
-
-    # println("Das Minimum der Prävalenz (Partner) ist: ", minimum(prev_spouse))
-    # println("Das Maximum der Prävalenz (Partner) ist: ", maximum(prev_spouse))
-    # println("Der Durchschnitt der Prävalenz (Partner) ist: ", mean(prev_spouse))
-    # println("Die Varianz der Prävalenz (Partner) ist: ", var(prev_spouse))
-
-    # println("Das Minimum der Prävalenz (Kinder) ist: ", minimum(prev_kids))
-    # println("Das Maximum der Prävalenz (Kinder) ist: ", maximum(prev_kids))
-    # println("Der Durchschnitt der Prävalenz (Kinder) ist: ", mean(prev_kids))
-    # println("Die Varianz der Prävalenz (Kinder) ist: ", var(prev_kids))
-
-    # println("Das Minimum des durchschnittlichen Risikos ist: ", minimum(avg_risk))
-    # println("Das Maximum des durchschnittlichen Risikos ist: ", maximum(avg_risk))
-    # println("Der Durchschnitt des durchschnittlichen Risikos ist: ", mean(avg_risk))
-    # println("Die Varianz des durchschnittlichen Risikos ist: ", var(avg_risk))
-
-    # println("Das Minimum der Abweichung ist: ", minimum(qual))
-    # println("Das Maximum der Abweichung ist: ", maximum(qual))
-    # println("Der Durchschnitt der Abweichung ist: ", mean(qual))
-    # println("Die Varianz der Abweichung ist: ", var(qual))
 
     return df_all_params
 end
@@ -913,12 +906,16 @@ function heritability_calculations(sim)
     e_falc = 0
 
     for person in sim.pop_identical_twins
-        push!(episodes_identtwin_a, person.n_dep_episode)
-        push!(episodes_identtwin_b, person.twin[1].n_dep_episode)
+        if person.age > 15
+            push!(episodes_identtwin_a, person.n_dep_episode)
+            push!(episodes_identtwin_b, person.twin[1].n_dep_episode)
+        end
     end
     for person in sim.pop_fraternal_twins
-        push!(episodes_frattwin_a, person.n_dep_episode)
-        push!(episodes_frattwin_b, person.twin[1].n_dep_episode)
+        if person.age > 15
+            push!(episodes_frattwin_a, person.n_dep_episode)
+            push!(episodes_frattwin_b, person.twin[1].n_dep_episode)
+        end
     end
 
     if length(episodes_identtwin_a) > 0 && length(episodes_identtwin_b) > 0 && length(episodes_frattwin_a) > 0 && length(episodes_frattwin_b) > 0
@@ -1079,4 +1076,43 @@ function toriskratio(sim)
     rr_ch = avg_children/avg_non_children
 
     return rr_par, rr_fr, rr_ac, rr_sp, rr_ch
+end
+
+
+function printgraph!(sim)
+
+    #every person is counted
+    D = Dict{SimplePerson, Int64}()
+
+    for i in eachindex(sim.pop)
+        D[sim.pop[i]] = i 
+    end
+
+    G = Graph(length(sim.pop))
+
+    for person in sim.pop
+        for parent in person.parents
+            if parent.alive
+                add_edge!(G, D[person], D[parent])
+            end
+        end
+        for friend in person.friends
+            add_edge!(G, D[person], D[friend])
+        end
+        for ac in person.ac
+            add_edge!(G, D[person], D[ac])
+        end
+        for children in person.children
+            add_edge!(G, D[person], D[children])
+        end
+        for spouse in person.spouse
+            add_edge!(G, D[person], D[spouse])
+        end
+        for twin in person.twin
+            add_edge!(G, D[person], D[twin])
+        end
+    end
+
+    adj = adjacency_matrix(G)
+    gplot(G)
 end
