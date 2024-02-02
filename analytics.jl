@@ -7,15 +7,16 @@ function ratedep_12month(sim)
 end
 
 function deprisk_life_15to65(sim)
-    counter = count(p->p.n_dep_episode_65>0 && p.age>65, sim.pop)
-
-    popcounter = count(p->p.age > 65, sim.pop)
-
-    return counter/popcounter
+    
+    counter = count(p->p.n_dep_episode_65>0 && p.alive == false, sim.pop_depressed)
+    counter_dep = count(p->p.alive == false, sim.pop_non_depressed)
+    return counter/(counter_dep + count(p->p.alive == false, sim.pop_depressed))
 end
 
 function deprisk_life(sim)
-    return length(sim.pop_depressed)/(length(sim.pop_non_depressed)+length(sim.pop_depressed))
+    counter = count(p->p.alive == false, sim.pop_depressed)
+    counter_dep = count(p->p.alive == false, sim.pop_non_depressed)
+    return counter/(counter + counter_dep)
 end
 
 function ratedep_parents_12month(sim)
@@ -361,8 +362,34 @@ function contacts_t0(pop_t_0)
 
     return par, fri, ac, sp, ch
 end
+
+function contacts_t4(fr, ac, sp, pop_t0)
+
+    fri_t4 = SimplePerson[]
+    ac_t4 = SimplePerson[]
+    sp_t4 = SimplePerson[]
+
+    for person in pop_t0
+        for friend in person.friends
+            if friend in fr
+                push!(fri_t4, friend)
+            end
+        end
+        for acs in person.ac 
+            if acs in ac
+                push!(ac_t4, acs)
+            end
+        end
+        for spouse in person.spouse
+            if spouse in sp
+                push!(sp_t4, spouse)
+            end
+        end
+    end
+    return fri_t4, ac_t4, sp_t4
+end
 #increased risk compared to different point in time
-function increasedrisks(former_risk_children, former_risk_friends, former_risk_ac, former_risk_parents, former_risk_spouse, par_t0, fri_t0, ac_t0, sp_t0, ch_t0, sim)
+function increasedrisks(former_risk_children, former_risk_friends, former_risk_ac, former_risk_parents, former_risk_spouse, par_t0, fri_t4, ac_t4, sp_t4, ch_t0, sim)
 
     i_ctr_ch = DeprCounter()
     i_ctr_fr = DeprCounter()
@@ -371,9 +398,9 @@ function increasedrisks(former_risk_children, former_risk_friends, former_risk_a
     i_ctr_par = DeprCounter()
 
     count_depr!(i_ctr_ch, par_t0)
-    count_depr!(i_ctr_fr, fri_t0)
-    count_depr!(i_ctr_ac, ac_t0)
-    count_depr!(i_ctr_sp, sp_t0)
+    count_depr!(i_ctr_fr, fri_t4)
+    count_depr!(i_ctr_ac, ac_t4)
+    count_depr!(i_ctr_sp, sp_t4)
     count_depr!(i_ctr_par, ch_t0)
 
     current_risk_parents = depr_ratio(i_ctr_ch)
@@ -688,7 +715,7 @@ function printpara!(sim, results)
     println("Zielparameter: ", Optimalparams())
 
     println( "** prev (12 months): ", ratedep_12month(sim) )
-    println( "lifetime risk of depression: ", deprisk_life(sim))
+    println( "** lifetime risk of depression: ", deprisk_life(sim))
     println( "** risk of depression between 15 and 65: ", deprisk_life_15to65(sim))
     println(" ")
     println( "prev parents (12 months): ", ratedep_parents_12month(sim) )
@@ -828,7 +855,7 @@ function rand_statistics(steps)
     increased_risk_spouse_4 = 0 
     increased_risk_ac_4= 0
 
-    df_all_params = DataFrame(prev = [], prev15_65 = [], rr_30_par = [], rr_4_fr = [], rr_4_ac = [], rr_4_sp = [], h = [], qual = [])
+    df_all_params = DataFrame(prev = [], prev15_65 = [], prev_life = [], rr_30_par = [], rr_4_fr = [], rr_4_ac = [], rr_4_sp = [], h = [], qual = [])
   
     d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids = pre_setup()
     para = Parameters()
@@ -839,9 +866,9 @@ function rand_statistics(steps)
 
         results=run_sim(sim, para)
         
-        q =  eval_params_multipleseeds(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
+        q =  eval_params_multipleseeds(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids, 5)
         h,c,e = heritability_calculations(sim)
-        push!(df_all_params, [round(ratedep_12month(sim), digits = 2) round(deprisk_life_15to65(sim), digits = 2) round(results.rr_parents_30, digits = 2) round(results.increased_risk_friends_4, digits = 2) round(results.increased_risk_ac_4, digits = 2) round(results.increased_risk_spouse_4, digits = 2) round(h, digits = 2) round(q, digits = 5)])        
+        push!(df_all_params, [round(ratedep_12month(sim), digits = 2) round(deprisk_life_15to65(sim), digits = 2) round(deprisk_life(sim), digits = 2) round(results.rr_parents_30, digits = 2) round(results.increased_risk_friends_4, digits = 2) round(results.increased_risk_ac_4, digits = 2) round(results.increased_risk_spouse_4, digits = 2) round(h, digits = 2) round(q, digits = 5)])        
 
         print("+")
     end

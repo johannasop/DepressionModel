@@ -151,10 +151,12 @@ function population_update!(person, sim, para)
 
     #Menschen sterben lassen: hier hab ichs noch nicht besser hingekriegt
     if person.age > 80
-        if person.n_dep_episode == 0
-            push!(sim.pop_non_depressed, person)
-        else
-            push!(sim.pop_depressed, person)
+        if sim.time > 0
+            if person.n_dep_episode == 0
+                push!(sim.pop_non_depressed, person)
+            else
+                push!(sim.pop_depressed, person)
+            end
         end
         return death!(person, sim)
     end
@@ -276,7 +278,7 @@ function newkid!(sim, para)
     parent2 = parent.spouse[1]
 
     #SES und susceptibility: gleicher SES wie Eltern aber bisschen andere susceptibility
-    newkid.susceptibility =  (para.h * ((parent.susceptibility + parent2.susceptibility)/2) + ((1-para.h) * limit(0, rand(Normal(1,para.b)), 50))) 
+    newkid.susceptibility =  (para.h * ((parent.susceptibility + parent2.susceptibility)/2) + ((1-para.h) * limit(para.base_sus, rand(Normal(para.mw_h,para.b)), 50))) 
 
     add_eachother!(newkid, newkid.parents, parent, parent.children)
     add_eachother!(newkid, newkid.parents, parent2, parent2.children)
@@ -303,7 +305,7 @@ function newkid!(sim, para)
             newtwin.susceptibility = newkid.susceptibility
             push!(sim.pop_identical_twins, newtwin)
         else
-            newtwin.susceptibility = (para.h * ((parent.susceptibility + parent2.susceptibility)/2) + ((1-para.h) * limit(0, rand(Normal(1,para.b)), 50))) 
+            newtwin.susceptibility = (para.h * ((parent.susceptibility + parent2.susceptibility)/2) + ((1-para.h) * limit(para.base_sus, rand(Normal(para.mw_h,para.b)), 50))) 
             push!(sim.pop_fraternal_twins, newtwin)
         end
 
@@ -359,9 +361,8 @@ function newpartner!(person, sim, para)
     #solange noch kein Partner gefunden wurde, durchlaufen lassen, um aber festhängen zu vermeiden, maximal 100 mal
     counter = 0
 
-    while length(person.spouse) == 0 && counter <= 100
+    while length(person.spouse) == 0 && counter <= 100 
         #Wahrscheinlichkeit aus dem gleichen Umfeld zu kommen, wird dann nochmal hälftig auf Freundeskreis und hälftig auf Bekanntenkreis aufgeteilt
-
         if rand() < para.partnersamecircle
             if rand() < 0.5 && length(person.friends)>0
                 potpartner = rand(person.friends)
@@ -371,8 +372,7 @@ function newpartner!(person, sim, para)
                 potpartner = rand(sim.pop_singles)
             end
         else
-            x = rand(1:length(sim.pop_singles))
-            potpartner = sim.pop_singles[x]
+            potpartner = rand(sim.pop_singles)
         end
 
         #Bedingungen: Partner muss single sein, der Altersunterschied darf nicht zu groß sein und der SES muss gleich sein, außerdem dürfen es nicht sie selber sein
@@ -406,7 +406,9 @@ function newpartner!(person, sim, para)
         end
         counter += 1
     end
+   
 end
+
 
 function splitup!(person, sim)
     spouse = person.spouse[1]

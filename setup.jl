@@ -58,7 +58,7 @@ function setup_mixed(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kid
     for i in eachindex(men)
          men[i].education = rand(1:4)
          calculateincome!(men[i], para)
-         men[i].susceptibility = limit(0, rand(Normal(1,para.b)), 50)
+         men[i].susceptibility = limit(para.base_sus, rand(Normal(para.mw_h,para.b)), 50)
 
          setprobther!(men[i], para)
     end
@@ -106,7 +106,7 @@ function setup_mixed(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kid
         woman.education = man.education
         calculateincome!(woman, para)
         setprobther!(woman, para)
-        woman.susceptibility = limit(0, rand(Normal(1, para.b)), 50)
+        woman.susceptibility = limit(0.01, rand(Normal(para.mw_h, para.b)), 50)
     end
 
     #ordne Kinder diesen Partnern zu
@@ -115,7 +115,7 @@ function setup_mixed(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kid
         parent = pop[rand(1:(para.n_fam*2))]
 
         #die sus der Kinder besteht zu einem Teil aus der der Eltern und zu einem Teil aus Umwelteinflüssen: Anteile können über para.h verändert werden
-        kid.susceptibility =  (para.h * ((parent.susceptibility + parent.spouse[1].susceptibility)/2) + ((1-para.h) * limit(0,rand(Normal(1,para.b)), 50)))
+        kid.susceptibility =  (para.h * ((parent.susceptibility + parent.spouse[1].susceptibility)/2) + ((1-para.h) * limit(para.base_sus,rand(Normal(para.mw_h,para.b)), 50)))
 
 
         push!(pop, kid)
@@ -136,7 +136,7 @@ function setup_mixed(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kid
     for i in eachindex(women)
         women[i].education = rand(1:4)
         calculateincome!(women[i], para)
-        women[i].susceptibility = limit(0, rand(Normal(1,para.b)), 50)
+        women[i].susceptibility = limit(para.base_sus, rand(Normal(para.mw_h,para.b)), 50)
 
         setprobther!(women[i], para)
     end
@@ -148,18 +148,10 @@ function setup_mixed(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kid
     for i in eachindex(pop)
         findsocial!(pop[i], pop, para)
     end
-    #findsocial_initial!(sim, para)
 
     return pop, pop_singles, pop_potentialparents, pop_identical_twins, pop_fraternal_twins
 end
 
-
-function findsocial_initial!(sim, para)
-
-    g = random_regular_graph(length(sim.pop), para.p_fr/2) 
-
-
-end
 
 function  setup_sim(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
     # for reproducibility

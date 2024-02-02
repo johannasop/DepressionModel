@@ -4,10 +4,19 @@ include("setup.jl")
 include("analytics.jl")
 include("calibration.jl")
 
+function pre_run!(sim, para, years)
 
+    for t in 1:years
+        update_agents!(sim, para)
+    end
+
+end
 function run_sim(sim, para, verbose = false, n_steps = 200)
+    #run 100 years first so social network is optimized
+    pre_run!(sim, para, 100)
+
     # random point in time to test increased risks 
-    rp = rand(80:(n_steps-30))
+    rp = sim.time + rand(1:(n_steps-30))
     # we keep track of the numbers
     n_depressed = Float64[]
     n_healthy = Float64[]
@@ -80,7 +89,8 @@ function run_sim(sim, para, verbose = false, n_steps = 200)
             current_risk_results = currentrisks_t0(sim, pop_t_0_depressed)
         end
         if sim.time == (rp + 4) #Zeitabstand im Rosenquist Paper
-            increased_risk_results = increasedrisks(current_risk_results..., par_t0, fr_t0, ac_t0, sp_t0, ch_t0, sim)
+            fr_t4, ac_t4, sp_t4 = contacts_t4(fr_t0, ac_t0, sp_t0, pop_t_0_depressed)
+            increased_risk_results = increasedrisks(current_risk_results..., par_t0, fr_t4, ac_t4, sp_t4, ch_t0, sim)
         end
         if sim.time == (rp + 30) #Zeitabstand bei Rasic et al., 2014 und  RR nicht im zeitlichen Vergleich sondern im Vergleich zu Kinder nichtdepressiver Eltern
             rr_parents_30 =  rr_par_30(pop_t_0_depressed, pop_t_0_nondep, sim)
@@ -122,9 +132,9 @@ function standard!(ther_restriction, fdbck_education, fdbck_income, seed = 0)
 
     printpara!(sim, results)
 
-    qualcurrentsolution = eval_params_multipleseeds(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids) 
+    #qualcurrentsolution = eval_params_multipleseeds(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids) 
 
-    println("Qualität der aktuellen Lösung: ", qualcurrentsolution)
+    #println("Qualität der aktuellen Lösung: ", qualcurrentsolution)
 
     #printgraph!(sim)
     #Plots.plot([c1, c2, c3, c4], labels =["1" "2" "3" "4"])
@@ -181,8 +191,7 @@ end
 #qual = approximation_rr(50) 
 #Plots.plot([qual], labels=["mittlere Abweichung"]) 
 
-#qual = approximation_params(60)
-#Plots.plot([qual], labels = ["mittlere Abweichung"])
+#approximation_params_big!(30)
 
 #hier kann sich ein Graph ausgegeben werden, bei dem geschaut wird, wie sich die Qualität der Simulation über den Bereich des Parameters entwickelt
 #mögliche Eingaben= "parent" "friends" "spouse" "child" "ac" "prev" "h"
@@ -192,7 +201,10 @@ end
 
 #test!()
 
-standard!(true, false, false)
+#standard!(true, false, false)
+
+
+
 #histograms_random_effects!(10)
 
 #sensi!()
@@ -221,12 +233,10 @@ standard!(true, false, false)
 #qual = approximation_rr(50) 
 #Plots.plot([qual], labels=["mittlere Abweichung"]) 
 
-#qual = approximation_params(50)
-#Plots.plot([qual], labels = ["mittlere Abweichung"])
+approximation_params!(80)
 
 #hier kann sich ein Graph ausgegeben werden, bei dem geschaut wird, wie sich die Qualität der Simulation über den Bereich des Parameters entwickelt
 #mögliche Eingaben= "parent" "friends" "spouse" "child" "ac" "prev" "h"
 #quality_plots!()
 #qual_h, parameter_field= quality_function_para("h")
 #Plots.plot([qual_h], labels = ["mA h"], x = [parameter_field])
-

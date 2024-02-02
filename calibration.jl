@@ -1,16 +1,17 @@
-Base.@kwdef mutable struct Optimalparams
+Base.@kwdef struct Optimalparams
     prev_12month::Float64 = 7.5
-    prev_15to65::Float64 = 25.0
+    prev_15to65::Float64 = 2.5
+    prev_life::Float64 = 3.5
 
-    h::Float64 = 0.37
-    increased_parents_30::Float64 = 3
+    h::Float64 = 3.7
+    increased_parents_30::Float64 = 3.0
     increased_friends_4::Float64 = 3.59
     increased_ac_4::Float64 = 1.18
     increased_spouse_4::Float64 = 0.5
     
 end
 
-Base.@kwdef mutable struct Optimalrates
+Base.@kwdef struct Optimalrates
 
     prev::Float64 = 0.075
     rate_parents::Float64 = 0.26
@@ -21,7 +22,7 @@ Base.@kwdef mutable struct Optimalrates
     h::Float64 = 0.35
 
 end
-Base.@kwdef mutable struct Optimalrr
+Base.@kwdef struct Optimalrr
 
     prev::Float64 = 0.075
     rr_par::Float64 = 2.38
@@ -37,7 +38,7 @@ function evaluationparams(sim, rr_parents_30, increasedrisk_friends, increasedri
     o = Optimalparams()
     h, c, e = heritability_calculations(sim)
 
-    return ((o.prev_12month - (ratedep_12month(sim)*100))^2 + (o.prev_15to65 - (deprisk_life_15to65(sim)*100))^2 + (o.h - h)^2 + (o.increased_parents_30 - rr_parents_30)^2 + (o.increased_friends_4 - increasedrisk_friends)^2 + (o.increased_ac_4 - increasedrisk_ac)^2 + (o.increased_spouse_4 - increasedrisk_spouse)^2 )/7
+    return ((o.prev_12month - (ratedep_12month(sim)*100))^2 + (o.prev_15to65 - (deprisk_life_15to65(sim)*10))^2 + (o.prev_life - deprisk_life(sim)*10)^2 + (o.h - (h*10))^2 + (o.increased_parents_30 - rr_parents_30)^2 + (o.increased_friends_4 - increasedrisk_friends)^2 + (o.increased_ac_4 - increasedrisk_ac)^2 + (o.increased_spouse_4 - increasedrisk_spouse)^2 )/8
 
 end
 
@@ -61,10 +62,10 @@ end
 
 
 
-function eval_params_multipleseeds(new_paras, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
+function eval_params_multipleseeds(new_paras, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids, n)
     meanfit = 0.0
 
-    for i=1:5
+    for i=1:n
         new_paras.seed = 0#rand(1:100)
         sim = setup_sim(new_paras, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
         results = run_sim(sim, new_paras)
@@ -72,7 +73,7 @@ function eval_params_multipleseeds(new_paras, d_sum_m, d_sum_f, d_sum_kids, data
 
     end
 
-    return meanfit/5
+    return meanfit/n
 end
 
 
@@ -200,7 +201,7 @@ end
 
 function randpara()
 
-    return Parameters(prev = rand(0.0:3.0), rate_parents= rand(0.0:3.0), rate_friends=rand(0.0:3.0), rate_ac = rand(0.0:3.0), rate_child = rand(0.0:3.0), rate_spouse = rand(0.0:3.0), h= rand(), b=rand(0.0:10.0))
+    return Parameters(prev = rand(0.0:3.0), rate_parents= rand(0.0:3.0), rate_friends=rand(0.0:3.0), rate_ac = rand(0.0:3.0), rate_child = rand(0.0:3.0), rate_spouse = rand(0.0:3.0), h= rand(), mw_h = rand(-10.0:10.0), base_sus = rand(0.0:10.0), b=rand(0.0:10.0))
 
 end
 
@@ -210,14 +211,15 @@ end
 
 function paraplusnorm(paras)
     
-    new_paras = Parameters(prev=limit(0, paras.prev + rand(Normal(0,1.0)), 3), rate_parents = limit(0, paras.rate_parents + rand(Normal(0,1.0)), 3), rate_friends = limit(0, paras.rate_friends + rand(Normal(0,1.0)), 3), rate_ac = limit(0, paras.rate_ac + rand(Normal(0,1.0)), 3), rate_child = limit(0, paras.rate_child + rand(Normal(0,1.0)), 3), rate_spouse = limit(0, paras.rate_spouse + rand(Normal(0,1.0)), 3), h = limit(0, paras.h + rand(Normal(0,0.1)), 1), b = limit(0, paras.b + rand(Normal(0,1.0)), 5))
+    new_paras = Parameters(prev=limit(0, paras.prev + rand(Normal(0,1.0)), 10), rate_parents = limit(0, paras.rate_parents + rand(Normal(0,1.0)), 10), rate_friends = limit(0, paras.rate_friends + rand(Normal(0,1.0)), 10), rate_ac = limit(0, paras.rate_ac + rand(Normal(0,1.0)), 10), rate_child = limit(0, paras.rate_child + rand(Normal(0,1.0)), 10), rate_spouse = limit(0, paras.rate_spouse + rand(Normal(0,1.0)), 10), h = limit(0, paras.h + rand(Normal(0,0.1)), 1), mw_h = limit(-10, paras.mw_h + rand(Normal(0, 1.0)), 10), base_sus = limit(0.0, paras.base_sus + rand(Normal(0, 1.0)), 10), b = limit(0, paras.b + rand(Normal(0,1.0)), 5))
 
     return new_paras
 end
-function approximation_params(steps, npoints=600) 
+
+
+function approximation_params!(steps, npoints=600) 
 
     pq_rates = Paraqualityrates[]
-    quality_array = Float64[]
 
     d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids = pre_setup()
 
@@ -225,7 +227,7 @@ function approximation_params(steps, npoints=600)
 	    print(".")
         new_paras = randpara()
 
-        qual_rates_new_paras = eval_params_multipleseeds(new_paras, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
+        qual_rates_new_paras = eval_params_multipleseeds(new_paras, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids, 5)
 
         push!(pq_rates, Paraqualityrates(new_paras, qual_rates_new_paras))
     end
@@ -233,7 +235,6 @@ function approximation_params(steps, npoints=600)
     for i=1:steps
         sort!(pq_rates, by=p->p.quality)
 
-        push!(quality_array, pq_rates[1].quality)
         println(pq_rates[1].quality)
         println(pq_rates[2].quality)
         println(pq_rates[3].quality)
@@ -249,7 +250,7 @@ function approximation_params(steps, npoints=600)
             new_paras_rates = paraplusnorm(pq_rates[trunc(Int64, rand(truncated(Normal(1, npoints/6); lower = 1, upper = npoints ÷ 2
             )))].parameters)
 
-            qual_rates_new_paras = eval_params_multipleseeds(new_paras_rates, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
+            qual_rates_new_paras = eval_params_multipleseeds(new_paras_rates, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids, 5)
 
             push!(pq_rates, Paraqualityrates(new_paras_rates, qual_rates_new_paras))
         end
@@ -261,10 +262,62 @@ function approximation_params(steps, npoints=600)
     sort!(pq_rates, by=p->p.quality)
 
     present_optimalsolution_rates(pq_rates) 
-
-    return quality_array
-
 end
+
+function approximation_params_big!(steps, npoints=600) 
+
+    pq_rates = Paraqualityrates[]
+
+    d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids = pre_setup()
+
+    for i=1:npoints
+	    print(".")
+        new_paras = randpara()
+
+        qual_rates_new_paras = eval_params_multipleseeds(new_paras, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids, 1)
+
+        push!(pq_rates, Paraqualityrates(new_paras, qual_rates_new_paras))
+    end
+    
+    for i=1:steps
+        sort!(pq_rates, by=p->p.quality)
+
+        println(pq_rates[1].quality)
+        println(pq_rates[2].quality)
+        println(pq_rates[3].quality)
+        println(last(pq_rates).quality)
+
+
+        for i=1:(npoints ÷ 2)
+            pop!(pq_rates)
+        end
+
+
+        for i=1:(npoints ÷ 2)
+            new_paras_rates = paraplusnorm(pq_rates[trunc(Int64, rand(truncated(Normal(1, npoints/6); lower = 1, upper = npoints ÷ 2
+            )))].parameters)
+
+            qual_rates_new_paras = eval_params_multipleseeds(new_paras_rates, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids, 1)
+
+            push!(pq_rates, Paraqualityrates(new_paras_rates, qual_rates_new_paras))
+        end
+
+        println("step $i")
+
+    end 
+
+    for i in eachindex(pq_rates)
+
+        pq_rates[i].quality = eval_params_multipleseeds(pq_rates[i].parameters, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids, 5)
+        print(",")
+
+    end
+
+    sort!(pq_rates, by=p->p.quality)
+
+    present_optimalsolution_rates(pq_rates) 
+end
+
 
 function approximation_rates(steps, npoints=600) 
 
