@@ -58,7 +58,8 @@ function setup_mixed(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kid
     for i in eachindex(men)
          men[i].education = rand(1:4)
          calculateincome!(men[i], para)
-         men[i].susceptibility = limit(para.base_sus, rand(Normal(para.mw_h,para.b)), 50)
+         men[i].gen_susceptibility = [limit(para.base_sus_gen, rand(Normal(para.mw_gen, para.b_gen)), 50), limit(para.base_sus_gen, rand(Normal(para.mw_gen, para.b_gen)), 50)]
+         men[i].pheno_susceptibility = (para.h* (sum(men[i].gen_susceptibility)/2) ) + ((1-para.h) * limit(para.base_sus, rand(Normal(para.mw_h,para.b)), 50))
 
          setprobther!(men[i], para)
     end
@@ -66,7 +67,7 @@ function setup_mixed(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kid
 
     #erstelle Familien mit Partnern
     for i=1:para.n_fam
-
+        counter = 0
         x = rand(1:length(men))
         y = rand(1:length(women))
         man = men[x]
@@ -74,16 +75,22 @@ function setup_mixed(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kid
 
         while length(man.spouse) < 1
             #als Partner gegenseitig eintragen, wenn Altersunterschied ok ist, anschließend in Population einfügen
-            if abs(man.age - woman.age) <= 5
+            if abs(man.age - woman.age) <= 5 && counter < 200
                 add_eachother!(man, man.spouse, woman, woman.spouse)
                 add_to_sc!(man, woman)
                 add_to_sc!(woman, man)
-            else 
+            elseif counter > 200 && abs(man.age-woman.age) <= 10
+                add_eachother!(man, man.spouse, woman, woman.spouse)
+                add_to_sc!(man, woman)
+                add_to_sc!(woman, man)
+            else
                 x = rand(1:length(men))
                 y = rand(1:length(women))
                 man = men[x]
                 woman = women[y]
             end
+
+            counter += 1
         end
 
         push!(pop, man)
@@ -102,11 +109,13 @@ function setup_mixed(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kid
         woman.currdur = man.currdur
 
 
-        #gleicher SÖS aber andere susceptibility: evtl. gar nicht so logisch, dass sie eine andere susceptibility haben: könnte man drüber diskutieren
+        #gleicher SÖS aber andere susceptibility
         woman.education = man.education
         calculateincome!(woman, para)
         setprobther!(woman, para)
-        woman.susceptibility = limit(0.01, rand(Normal(para.mw_h, para.b)), 50)
+
+        woman.gen_susceptibility = [limit(para.base_sus_gen, rand(Normal(para.mw_gen, para.b_gen)), 50), limit(para.base_sus_gen, rand(Normal(para.mw_gen, para.b_gen)), 50)]
+        woman.pheno_susceptibility = (para.h* (sum(woman.gen_susceptibility)/2) ) + ((1-para.h) * limit(para.base_sus, rand(Normal(para.mw_h,para.b)), 50))
     end
 
     #ordne Kinder diesen Partnern zu
@@ -115,7 +124,8 @@ function setup_mixed(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kid
         parent = pop[rand(1:(para.n_fam*2))]
 
         #die sus der Kinder besteht zu einem Teil aus der der Eltern und zu einem Teil aus Umwelteinflüssen: Anteile können über para.h verändert werden
-        kid.susceptibility =  (para.h * ((parent.susceptibility + parent.spouse[1].susceptibility)/2) + ((1-para.h) * limit(para.base_sus,rand(Normal(para.mw_h,para.b)), 50)))
+        kid.gen_susceptibility = [rand(parent.gen_susceptibility), rand(parent.spouse[1].gen_susceptibility)]
+        kid.pheno_susceptibility = (para.h* (sum(kid.gen_susceptibility)/2) ) + ((1-para.h) * limit(para.base_sus, rand(Normal(para.mw_h,para.b)), 50))
 
 
         push!(pop, kid)
@@ -136,7 +146,9 @@ function setup_mixed(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kid
     for i in eachindex(women)
         women[i].education = rand(1:4)
         calculateincome!(women[i], para)
-        women[i].susceptibility = limit(para.base_sus, rand(Normal(para.mw_h,para.b)), 50)
+
+        women[i].gen_susceptibility = [limit(para.base_sus_gen, rand(Normal(para.mw_gen, para.b_gen)), 50), limit(para.base_sus_gen, rand(Normal(para.mw_gen, para.b_gen)), 50)]
+        women[i].pheno_susceptibility = (para.h* (sum(women[i].gen_susceptibility)/2) ) + ((1-para.h) * limit(para.base_sus, rand(Normal(para.mw_h,para.b)), 50))
 
         setprobther!(women[i], para)
     end

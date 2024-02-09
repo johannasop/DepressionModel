@@ -1,13 +1,12 @@
 Base.@kwdef struct Optimalparams
     prev_12month::Float64 = 7.5
     prev_15to65::Float64 = 2.5
-    prev_life::Float64 = 3.5
 
     h::Float64 = 3.7
     increased_parents_30::Float64 = 3.0
-    increased_friends_4::Float64 = 3.59
-    increased_ac_4::Float64 = 1.18
-    increased_spouse_4::Float64 = 0.5
+    increased_friends_4::Float64 = 4.59
+    increased_ac_4::Float64 = 2.18
+    increased_spouse_4::Float64 = 1.5
     
 end
 
@@ -38,7 +37,7 @@ function evaluationparams(sim, rr_parents_30, increasedrisk_friends, increasedri
     o = Optimalparams()
     h, c, e = heritability_calculations(sim)
 
-    return ((o.prev_12month - (ratedep_12month(sim)*100))^2 + (o.prev_15to65 - (deprisk_life_15to65(sim)*10))^2 + (o.prev_life - deprisk_life(sim)*10)^2 + (o.h - (h*10))^2 + (o.increased_parents_30 - rr_parents_30)^2 + (o.increased_friends_4 - increasedrisk_friends)^2 + (o.increased_ac_4 - increasedrisk_ac)^2 + (o.increased_spouse_4 - increasedrisk_spouse)^2 )/8
+    return ((o.prev_15to65 - (deprisk_life_15to65(sim)*10))^2 + (o.h - (h*10))^2 + (o.increased_parents_30 - rr_parents_30)^2 + (log(o.increased_friends_4)*10 - log(increasedrisk_friends)*10)^2 + (log(o.increased_ac_4)*10 - log(increasedrisk_ac)*10)^2 + (log(o.increased_spouse_4)*10 - log(increasedrisk_spouse)*10)^2 )/7
 
 end
 
@@ -201,7 +200,7 @@ end
 
 function randpara()
 
-    return Parameters(prev = rand(0.0:3.0), rate_parents= rand(0.0:3.0), rate_friends=rand(0.0:3.0), rate_ac = rand(0.0:3.0), rate_child = rand(0.0:3.0), rate_spouse = rand(0.0:3.0), h= rand(), mw_h = rand(-10.0:10.0), base_sus = rand(0.0:10.0), b=rand(0.0:10.0))
+    return Parameters(prev = rand(0.0:3.0), rate_parents= rand(0.0:3.0), rate_friends=rand(0.0:3.0), rate_ac = rand(0.0:3.0), rate_child = rand(0.0:3.0), rate_spouse = rand(0.0:3.0), h= rand(), mw_h = rand(-10.0:10.0),  base_sus = rand(0.0:10.0), base_sus_gen=rand(-10.0:10.0), b=rand(0.0:10.0), homophily_friends=rand(0:1), homophily_spouse=rand(0:1), homophily_ac=rand(0:1), b_gen = rand(0:1))
 
 end
 
@@ -211,7 +210,7 @@ end
 
 function paraplusnorm(paras)
     
-    new_paras = Parameters(prev=limit(0, paras.prev + rand(Normal(0,1.0)), 10), rate_parents = limit(0, paras.rate_parents + rand(Normal(0,1.0)), 10), rate_friends = limit(0, paras.rate_friends + rand(Normal(0,1.0)), 10), rate_ac = limit(0, paras.rate_ac + rand(Normal(0,1.0)), 10), rate_child = limit(0, paras.rate_child + rand(Normal(0,1.0)), 10), rate_spouse = limit(0, paras.rate_spouse + rand(Normal(0,1.0)), 10), h = limit(0, paras.h + rand(Normal(0,0.1)), 1), mw_h = limit(-10, paras.mw_h + rand(Normal(0, 1.0)), 10), base_sus = limit(0.0, paras.base_sus + rand(Normal(0, 1.0)), 10), b = limit(0, paras.b + rand(Normal(0,1.0)), 5))
+    new_paras = Parameters(prev=limit(0, paras.prev + rand(Normal(0,1.0)), 10), rate_parents = limit(0, paras.rate_parents + rand(Normal(0,1.0)), 10), rate_friends = limit(0, paras.rate_friends + rand(Normal(0,1.0)), 10), rate_ac = limit(0, paras.rate_ac + rand(Normal(0,1.0)), 10), rate_child = limit(0, paras.rate_child + rand(Normal(0,1.0)), 10), rate_spouse = limit(0, paras.rate_spouse + rand(Normal(0,1.0)), 10), h = limit(0, paras.h + rand(Normal(0,0.1)), 1), mw_h = limit(-10, paras.mw_h + rand(Normal(0, 1.0)), 10), base_sus = limit(0.0, paras.base_sus + rand(Normal(0, 1.0)), 10), base_sus_gen = limit(0.0, paras.base_sus_gen + rand(Normal(0, 1.0)), 10), b = limit(0, paras.b + rand(Normal(0,1.0)), 5), b_gen = limit(0, paras.b_gen + rand(Normal(0, 1.0)), 5), homophily_ac = limit(0, paras.homophily_ac + rand(Normal(0, 0.1)), 1), homophily_friends = limit(0, paras.homophily_friends + rand(Normal(0, 0.1)), 1) , homophily_spouse = limit(0, paras.homophily_spouse + rand(Normal(0, 0.1)), 1))
 
     return new_paras
 end

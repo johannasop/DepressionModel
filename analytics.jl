@@ -410,11 +410,11 @@ function increasedrisks(former_risk_children, former_risk_friends, former_risk_a
     current_risk_children = depr_ratio(i_ctr_par)
 
 
-    return (increased_risk_parents_4 = (current_risk_children/former_risk_children - 1), 
-	    increased_risk_friends_4 = (current_risk_friends/former_risk_friends-1), 
-	    increased_risk_ac_4 = (current_risk_ac/former_risk_ac-1), 
-	    increased_risk_children_4 = (current_risk_parents/former_risk_parents-1), 
-	    increased_risk_spouse_4 = (current_risk_spouse/former_risk_spouse-1))
+    return (increased_risk_parents_4 = (current_risk_children/former_risk_children), 
+	    increased_risk_friends_4 = (current_risk_friends/former_risk_friends), 
+	    increased_risk_ac_4 = (current_risk_ac/former_risk_ac), 
+	    increased_risk_children_4 = (current_risk_parents/former_risk_parents), 
+	    increased_risk_spouse_4 = (current_risk_spouse/former_risk_spouse))
 end
 
 
@@ -715,7 +715,7 @@ function printpara!(sim, results)
     println("Zielparameter: ", Optimalparams())
 
     println( "** prev (12 months): ", ratedep_12month(sim) )
-    println( "** lifetime risk of depression: ", deprisk_life(sim))
+    println( "lifetime risk of depression: ", deprisk_life(sim))
     println( "** risk of depression between 15 and 65: ", deprisk_life_15to65(sim))
     println(" ")
     println( "prev parents (12 months): ", ratedep_parents_12month(sim) )
@@ -742,11 +742,11 @@ function printpara!(sim, results)
     println("risk ratio spouse: ", rr_spouse(sim))
     println("risk ratio children: ", rr_children(sim))
     println(" ")
-    println("increased risk if parent is depressed 4 years later: ", results.increased_risk_parents_4)
-    println("** increased risk if friend is depressed 4 years later: ", results.increased_risk_friends_4)
-    println("** increased risk if ac is depressed 4 years later: ", results.increased_risk_ac_4)
-    println("** increased risk if spouse is depressed 4 years later: ", results.increased_risk_spouse_4)
-    println("increased risk if child is depressed 4 years later: ", results.increased_risk_children_4)
+    println("increased risk if parent is depressed 4 years later: ", results.increased_risk_parents_4 - 1)
+    println("** increased risk if friend is depressed 4 years later: ", results.increased_risk_friends_4 - 1)
+    println("** increased risk if ac is depressed 4 years later: ", results.increased_risk_ac_4 - 1)
+    println("** increased risk if spouse is depressed 4 years later: ", results.increased_risk_spouse_4 - 1)
+    println("increased risk if child is depressed 4 years later: ", results.increased_risk_children_4 - 1)
     println(" ")
     h, c, e = heritability_calculations(sim)
     println("Heritabilitätsschätzer: ")
@@ -953,6 +953,7 @@ function heritability_calculations(sim)
         c_falc = cor_ident - h_falc
         e_falc = 1 - cor_ident
     end
+
     return h_falc, c_falc, e_falc
 end
 

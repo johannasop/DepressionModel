@@ -11,9 +11,9 @@ function pre_run!(sim, para, years)
     end
 
 end
-function run_sim(sim, para, verbose = false, n_steps = 200)
+function run_sim(sim, para, verbose = false, n_steps = 100)
     #run 100 years first so social network is optimized
-    pre_run!(sim, para, 100)
+    pre_run!(sim, para, 80)
 
     # random point in time to test increased risks 
     rp = sim.time + rand(1:(n_steps-30))
@@ -191,7 +191,7 @@ end
 #qual = approximation_rr(50) 
 #Plots.plot([qual], labels=["mittlere Abweichung"]) 
 
-#approximation_params_big!(30)
+approximation_params_big!(50)
 
 #hier kann sich ein Graph ausgegeben werden, bei dem geschaut wird, wie sich die Qualität der Simulation über den Bereich des Parameters entwickelt
 #mögliche Eingaben= "parent" "friends" "spouse" "child" "ac" "prev" "h"
@@ -202,7 +202,6 @@ end
 #test!()
 
 #standard!(true, false, false)
-
 
 
 #histograms_random_effects!(10)
@@ -233,7 +232,7 @@ end
 #qual = approximation_rr(50) 
 #Plots.plot([qual], labels=["mittlere Abweichung"]) 
 
-approximation_params!(80)
+#approximation_params!(80)
 
 #hier kann sich ein Graph ausgegeben werden, bei dem geschaut wird, wie sich die Qualität der Simulation über den Bereich des Parameters entwickelt
 #mögliche Eingaben= "parent" "friends" "spouse" "child" "ac" "prev" "h"

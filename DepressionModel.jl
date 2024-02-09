@@ -45,7 +45,9 @@ mutable struct SimplePerson
    
 
     prob_ther::Float64
-    susceptibility::Float64
+
+    gen_susceptibility::Vector{Float64}
+    pheno_susceptibility::Float64
     risk::Float64
 
     #estimated length of current relationship and current duration
@@ -66,8 +68,8 @@ end
 
 
 # how we construct a person object
-SimplePerson() = SimplePerson(true,[], [], [], [], [], [], 0, healthy, 0, 0, 0, 0, 0, 0, 0, [], 0, 0, 0)   # default Person is susceptible and has no contacts
-SimplePerson(state) = SimplePerson(true,[], [], [], [], [], [], 0, state, 0, 0, 0, 0, 0, 0, 0, [], 0, 0, 0)  # default Person has no contacts
+SimplePerson() = SimplePerson(true,[], [], [], [], [], [], 0, healthy, 0, 0, 0, [], 0, 0, 0, 0, [], 0, 0, 0)   # default Person is susceptible and has no contacts
+SimplePerson(state) = SimplePerson(true,[], [], [], [], [], [], 0, state, 0, 0, 0, [], 0, 0, 0, 0, [], 0, 0, 0)  # default Person has no contacts
 
 
 # this is a parametric type
@@ -123,7 +125,7 @@ function update!(person, sim, para)
         rate += para.prev
     end
 
-    person.risk = ratetoprob(rate * person.susceptibility)
+    person.risk = ratetoprob(rate * person.pheno_susceptibility)
     if person.age >= 15 && rand() < person.risk
         person.state = depressed
         push!(sim.pop_currently_depressed, person)
@@ -278,7 +280,8 @@ function newkid!(sim, para)
     parent2 = parent.spouse[1]
 
     #SES und susceptibility: gleicher SES wie Eltern aber bisschen andere susceptibility
-    newkid.susceptibility =  (para.h * ((parent.susceptibility + parent2.susceptibility)/2) + ((1-para.h) * limit(para.base_sus, rand(Normal(para.mw_h,para.b)), 50))) 
+    newkid.gen_susceptibility = [rand(parent.gen_susceptibility), rand(parent2.gen_susceptibility)]
+    newkid.pheno_susceptibility =  (para.h * ((sum(newkid.gen_susceptibility))/2) + ((1-para.h) * limit(para.base_sus, rand(Normal(para.mw_h,para.b)), 50))) 
 
     add_eachother!(newkid, newkid.parents, parent, parent.children)
     add_eachother!(newkid, newkid.parents, parent2, parent2.children)
@@ -302,11 +305,17 @@ function newkid!(sim, para)
         socialcircle_twin!(newkid, newtwin)
 
         if rand() < (1/3)
-            newtwin.susceptibility = newkid.susceptibility
-            push!(sim.pop_identical_twins, newtwin)
+            newtwin.gen_susceptibility = newkid.gen_susceptibility
+            newtwin.pheno_susceptibility = (para.h * ((sum(newtwin.gen_susceptibility))/2) + ((1-para.h) * limit(para.base_sus, rand(Normal(para.mw_h,para.b)), 50))) 
+            if sim.time > 0
+                push!(sim.pop_identical_twins, newtwin)
+            end
         else
-            newtwin.susceptibility = (para.h * ((parent.susceptibility + parent2.susceptibility)/2) + ((1-para.h) * limit(para.base_sus, rand(Normal(para.mw_h,para.b)), 50))) 
-            push!(sim.pop_fraternal_twins, newtwin)
+            newtwin.gen_susceptibility = [rand(parent.gen_susceptibility), rand(parent2.gen_susceptibility)]
+            newtwin.pheno_susceptibility = (para.h * ((sum(newtwin.gen_susceptibility))/2) + ((1-para.h) * limit(para.base_sus, rand(Normal(para.mw_h,para.b)), 50))) 
+            if sim.time > 0
+                push!(sim.pop_fraternal_twins, newtwin)
+            end
         end
 
         add_eachother!(newkid, newkid.twin, newtwin, newtwin.twin)
@@ -360,8 +369,9 @@ function newpartner!(person, sim, para)
 
     #solange noch kein Partner gefunden wurde, durchlaufen lassen, um aber festhängen zu vermeiden, maximal 100 mal
     counter = 0
+    found = false
 
-    while length(person.spouse) == 0 && counter <= 100 
+    while length(person.spouse) == 0 && counter <= 200 
         #Wahrscheinlichkeit aus dem gleichen Umfeld zu kommen, wird dann nochmal hälftig auf Freundeskreis und hälftig auf Bekanntenkreis aufgeteilt
         if rand() < para.partnersamecircle
             if rand() < 0.5 && length(person.friends)>0
@@ -376,7 +386,17 @@ function newpartner!(person, sim, para)
         end
 
         #Bedingungen: Partner muss single sein, der Altersunterschied darf nicht zu groß sein und der SES muss gleich sein, außerdem dürfen es nicht sie selber sein
-        if length(potpartner.spouse) == 0 && (abs(potpartner.age - person.age) <= 5+(person.age*0.1)) && potpartner.education == person.education && potpartner.age >= 18 && potpartner != person && !(potpartner in person.parents) && !(potpartner in person.children) && (everdepressed(person) == everdepressed(potpartner))
+        if rand() < para.homophily_spouse
+            if length(potpartner.spouse) == 0 && (abs(potpartner.age - person.age) <= 5+(person.age*0.1)) && potpartner.education == person.education && potpartner.age >= 18 && potpartner != person && !(potpartner in person.parents) && !(potpartner in person.children) && (everdepressed(person) == everdepressed(potpartner))
+                found = true
+            end
+        else
+            if length(potpartner.spouse) == 0 && (abs(potpartner.age - person.age) <= 5+(person.age*0.1)) && potpartner.education == person.education && potpartner.age >= 18 && potpartner != person && !(potpartner in person.parents) && !(potpartner in person.children) 
+                found = true
+            end
+        end
+
+        if found
             #für beide die Beziehungsdauer bestimmen
             person.rellength = rand(Poisson(para.durations[rand(1:length(para.durations))]))
             potpartner.rellength = person.rellength
@@ -398,13 +418,15 @@ function newpartner!(person, sim, para)
             del_unsorted!(potpartner, person.ac)
             del_unsorted!(person, potpartner.ac)
         
-            #Personen landen auf der Liste bei bestimmter Wahrscheinlichkeit: ab 55 Jahren können sie keine Kinder mehr bekommen
+            #Personen landen auf der Liste bei bestimmter Wahrscheinlichkeit: ab 50 Jahren können sie keine Kinder mehr bekommen
             if rand() > para.p_none && person.age < 50 && potpartner.age < 50
                 push!(sim.pop_potentialparents, person)
                 push!(sim.pop_potentialparents, potpartner)
             end
         end
+
         counter += 1
+
     end
    
 end
@@ -441,8 +463,9 @@ function findsocial!(person, pop, para)
 
     number_ac = rand(Poisson(para.p_ac))
     number_fr = rand(Poisson(para.p_fr))
+    counter = 0
 
-    while length(person.friends) < number_fr
+    while length(person.friends) < number_fr && counter < 100
         pos_fr = rand(pop)
         if is_stranger(person, pos_fr) && (5 + (person.age*0.25) > abs(person.age-pos_fr.age)) 
             add_eachother!(person, person.friends, pos_fr, pos_fr.friends)
@@ -453,9 +476,12 @@ function findsocial!(person, pop, para)
             del_unsorted!(pos_fr, person.rel_socialcircle)
             del_unsorted!(person, pos_fr.rel_socialcircle)
         end
+
+        counter += 1
     end
 
-    while length(person.ac) < number_ac
+    counter = 0
+    while length(person.ac) < number_ac && counter < 100
         #sollte es keine potenziellen Bekannten mehr im Umkreis geben, oder die Person keine Freunde haben, werden einfach Personen aus der Population ausgewählt
         if length(person.friends) == 0 || length(person.rel_socialcircle) == 0
             pos_ac = rand(pop)
@@ -472,6 +498,8 @@ function findsocial!(person, pop, para)
             del_unsorted!(pos_ac, person.rel_socialcircle)
             del_unsorted!(person, pos_ac.rel_socialcircle)
         end
+
+        counter += 1
     end            
 end
 
@@ -514,6 +542,9 @@ function social_dynamic!(person, para, sim)
 
     #jährlich neue Bekannte: diese sollen aus dem ähnlichen sozialen Umfeld stammen und den gleichen mental state haben
     for i=1:rand(Poisson(para.new_ac_year))
+        found = false
+        counter = 0
+
         if length(person.ac) == 0 || length(person.rel_socialcircle) == 0
             break
         end
@@ -523,36 +554,58 @@ function social_dynamic!(person, para, sim)
 
         #new ac is picked dependend on depression State
         if any(p->everdepressed(p) == everdepressed(person), person.rel_socialcircle) 
-            while true
+            while counter < 200
+
                 pos_ac = rand(person.rel_socialcircle)
 
-                @assert is_stranger(person, pos_ac)
+                if rand() < para.homophily_ac 
+                    if is_stranger(person, pos_ac) && (everdepressed(person) == everdepressed(pos_ac))
+                        found = true
+                    end
 
-                if everdepressed(person) == everdepressed(pos_ac) 
+                else
+                    if is_stranger(person, pos_ac)
+                        found = true
+                    end
+                end
+
+                if found
                     add_eachother!(person, person.ac, pos_ac, pos_ac.ac)
                     del_unsorted!(pos_ac, person.rel_socialcircle)
                     del_unsorted!(person, pos_ac.rel_socialcircle)
                     break
                 end
+                counter +=1
             end
-
         else
-            while true
+            while counter < 200
 
                 pos_ac = rand(sim.pop)
 
-                if is_stranger(person, pos_ac) 
+                if rand() < para.homophily_ac 
+                    if is_stranger(person, pos_ac) && (everdepressed(person) == everdepressed(pos_ac))
+                        found = true
+                    end
+                else 
+                    if is_stranger(person, pos_ac) 
+                        found = true
+                    end
+                end
+
+                if found 
                     add_eachother!(person, person.ac, pos_ac, pos_ac.ac)
                     del_unsorted!(pos_ac, person.rel_socialcircle)
                     del_unsorted!(person, pos_ac.rel_socialcircle)
                     break
                 end
+                counter += 1
             end
         end
     end
     
-    if length(person.friends)>0 && length(person.rel_socialcircle) > 0 &&
-		rand() < para.p_new_friend_year
+    if length(person.friends)>0 && length(person.rel_socialcircle) > 0 && rand() < para.p_new_friend_year
+        found = false
+        counter = 0
 
         old_friend = rand(person.friends)
         del_unsorted!(old_friend, person.friends)
@@ -560,10 +613,20 @@ function social_dynamic!(person, para, sim)
 
         #new friend is picked dependend on depression State
         if any(p-> everdepressed(p) == everdepressed(person), person.rel_socialcircle) 
-            while true
+            while counter < 200
                 pos_fr = rand(person.rel_socialcircle)
 
-                if everdepressed(pos_fr) == everdepressed(person)
+                if rand() < para.homophily_friends
+                    if is_stranger(person, pos_fr) && (everdepressed(person) == everdepressed(pos_fr))
+                        found = true
+                    end
+                else 
+                    if is_stranger(person, pos_fr)
+                        found = true 
+                    end
+                end
+
+                if found
                     add_eachother!(person, person.friends, pos_fr, pos_fr.friends)
                     add_to_sc!(person, pos_fr)
                     add_to_sc!(pos_fr, person)
@@ -571,12 +634,24 @@ function social_dynamic!(person, para, sim)
                     del_unsorted!(person, pos_fr.rel_socialcircle)
                     break
                 end
+
+                counter +=1
             end
         else
-            while true
+            while counter < 200
                 pos_fr = rand(sim.pop)
 
-                if is_stranger(person, pos_fr) && 5+(person.age*0.25)>abs(person.age-pos_fr.age) 
+                if rand() < para.homophily_friends 
+                    if is_stranger(person, pos_fr) && (everdepressed(person) == everdepressed(pos_fr))&& 5+(person.age*0.25)>abs(person.age-pos_fr.age) 
+                        found = true
+                    end
+                else 
+                    if is_stranger(person, pos_fr) && (5+(person.age*0.25)>abs(person.age-pos_fr.age)) 
+                        found = true 
+                    end
+                end
+
+                if found
                     add_eachother!(person, person.friends, pos_fr, pos_fr.friends)
                     add_to_sc!(person, pos_fr)
                     add_to_sc!(pos_fr, person)
@@ -584,7 +659,8 @@ function social_dynamic!(person, para, sim)
                     del_unsorted!(person, pos_fr.rel_socialcircle)
                     break
                 end 
-            
+                counter += 1
+
             end
         end
         end
