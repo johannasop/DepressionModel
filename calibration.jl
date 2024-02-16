@@ -3,6 +3,8 @@ Base.@kwdef struct Optimalparams
     prev_15to65::Float64 = 2.5
 
     h::Float64 = 3.7
+    c::Float64 = 0.0
+    e::Float64 = 0.3
     increased_parents_30::Float64 = 3.0
     increased_friends_4::Float64 = 4.59
     increased_ac_4::Float64 = 2.18
@@ -37,7 +39,7 @@ function evaluationparams(sim, rr_parents_30, increasedrisk_friends, increasedri
     o = Optimalparams()
     h, c, e = heritability_calculations(sim)
 
-    return ((o.prev_15to65 - (deprisk_life_15to65(sim)*10))^2 + (o.h - (h*10))^2 + (o.increased_parents_30 - rr_parents_30)^2 + (log(o.increased_friends_4)*10 - log(increasedrisk_friends)*10)^2 + (log(o.increased_ac_4)*10 - log(increasedrisk_ac)*10)^2 + (log(o.increased_spouse_4)*10 - log(increasedrisk_spouse)*10)^2 )/7
+    return ((o.prev_15to65 - (deprisk_life_15to65(sim)*10))^2 + (o.h - (h*10))^2 + (o.e - (e*10))^2 + (o.c - (c*10))^2 + (o.increased_parents_30 - rr_parents_30)^2 + (log(o.increased_friends_4)*10 - log(increasedrisk_friends)*10)^2 + (log(o.increased_ac_4)*10 - log(increasedrisk_ac)*10)^2 + (log(o.increased_spouse_4)*10 - log(increasedrisk_spouse)*10)^2 )/9
 
 end
 
@@ -369,6 +371,38 @@ function approximation_rates(steps, npoints=600)
     return quality_array
 
 end
+
+function calibration_abcde!()
+    
+    data = Optimalparams()
+   
+    ϵ = 4.0
+
+    priors = Product([Uniform(0,10) for i=1:15])
+
+    r1 = abcdesmc!(priors, dist!, ϵ , data, nparticles=1000, parallel = true)
+
+    posterior = [t[1] for t in r1.P[r1.Wns .> 0.0]]
+    evidence = exp(r1.logZ)
+end
+
+function dist!(priors, data) 
+    results, h, c, e, life = model(priors)
+    (abs(life -data.prev_15to65) + abs((h*10) - data.h) + abs((e*10) - data.e) + abs((c*10) - data.c) + abs(results.rr_parents_30 - data.increased_parents_30) + abs(log(results.increased_risk_friends_4)*10 - log(data.increased_friends_4)*10) + abs(log(results.increased_risk_ac_4)*10 - log(data.increased_ac_4)*10) + abs(log(results.increased_risk_spouse_4)*10 - log(data.increased_spouse_4)*10))/8, nothing
+end
+
+function model(r)
+    d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids = pre_setup()
+
+    paras = Parameters(prev = r[1], rate_parents = r[2], rate_friends = r[3], rate_ac = r[4], rate_child = r[5], rate_spouse = r[6], h= r[7], mw_h = r[8],  base_sus = r[9], base_sus_gen=r[10], b=r[11], homophily_friends=r[12], homophily_spouse=r[13], homophily_ac=r[14], b_gen = r[15])
+    sim = setup_sim(paras, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
+
+    results = run_sim(sim, paras)
+    h, c, e = heritability_calculations(sim)
+    life = deprisk_life_15to65(sim)*10
+    return results, h, c, e, life
+end
+
 function optimization_current_para(steps, npoints=600)
     pq_rates = Paraqualityrates[]
     quality_array = Float64[]
