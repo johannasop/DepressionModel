@@ -1111,9 +1111,18 @@ function printgraph!(sim)
 
     #every person is counted
     D = Dict{SimplePerson, Int64}()
+    membership = Int64[]
 
     for i in eachindex(sim.pop)
         D[sim.pop[i]] = i 
+
+        if sim.pop[i].state == depressed
+            push!(membership, 1)
+        elseif everdepressed(sim.pop[i])
+            push!(membership, 2)
+        else
+            push!(membership, 3)
+        end
     end
 
     G = Graph(length(sim.pop))
@@ -1140,7 +1149,64 @@ function printgraph!(sim)
             add_edge!(G, D[person], D[twin])
         end
     end
+    nodecolor = [colorant"red", colorant"orange", colorant"blue"] 
+    nodefillc = nodecolor[membership]
+
 
     adj = adjacency_matrix(G)
-    gplot(G)
+    gplot(G, nodefillc=nodefillc)
+end
+
+function pl(sim)
+    
+    ego_f = Int64[]
+    ego_a = Int64[]
+    ego_s = Int64[]
+    ego_p = Int64[]
+
+    friendaverage = Float64[]
+    spouse = Int64[]
+    acaverage = Float64[]
+    parentaverage = Float64[]
+
+    for p in sim.pop
+        f = 0
+        a = 0
+        s = 0
+        pa = 0
+
+        for friend in p.friends
+            f += friend.n_dep_episode
+        end
+        for ac in p.ac
+            a += ac.n_dep_episode
+        end
+        for parent in p.parents
+            pa += parent.n_dep_episode
+        end
+
+
+        if length(p.spouse) > 0
+            s = p.spouse[1].n_dep_episode
+            push!(spouse, s)
+            push!(ego_s, p.n_dep_episode)
+        end
+
+        if length(p.friends)>0
+            push!(friendaverage, f/length(p.friends))
+            push!(ego_f, p.n_dep_episode)
+
+        end
+        if length(p.ac)>0
+            push!(acaverage, a/length(p.ac))
+            push!(ego_a, p.n_dep_episode)
+        end
+        if length(p.parents)>0
+            push!(parentaverage, pa/length(p.parents))
+            push!(ego_p, p.n_dep_episode)
+        end
+        
+    end
+
+    return ego_f, ego_a, ego_s, ego_p, friendaverage, acaverage, spouse, parentaverage
 end

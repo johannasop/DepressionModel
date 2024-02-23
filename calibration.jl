@@ -375,26 +375,37 @@ end
 function calibration_abcde!()
     
     data = Optimalparams()
-   
-    ϵ = 4.0
+    #priors = Product([Uniform(0,10) for i=1:10]), [Uniform(0,1) for i=1:4], [Uniform(-10, 10) for i = 1:2]
 
-    priors = Product([Uniform(0,10) for i=1:15])
+    ϵ = 1.0
 
-    r1 = abcdesmc!(priors, dist!, ϵ , data, nparticles=1000, parallel = true)
+    priors = Product([Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(0,1), Uniform(0,1), Uniform(0,1), Uniform(0,1), Uniform(-10, 10), Uniform(-10, 10)]) 
+
+    r1 = abcdesmc!(priors, dist!, ϵ , data, nparticles=100, nsims_max = 120000, parallel = true)
 
     posterior = [t[1] for t in r1.P[r1.Wns .> 0.0]]
     evidence = exp(r1.logZ)
+
+    println(posterior)
+    println(evidence)
+    println(blobs)
+
+    Plots.plot!(posterior)
+
+    blobs = r1.blobs[r1.Wns .> 0.0]
+    
 end
 
-function dist!(priors, data) 
-    results, h, c, e, life = model(priors)
-    (abs(life -data.prev_15to65) + abs((h*10) - data.h) + abs((e*10) - data.e) + abs((c*10) - data.c) + abs(results.rr_parents_30 - data.increased_parents_30) + abs(log(results.increased_risk_friends_4)*10 - log(data.increased_friends_4)*10) + abs(log(results.increased_risk_ac_4)*10 - log(data.increased_ac_4)*10) + abs(log(results.increased_risk_spouse_4)*10 - log(data.increased_spouse_4)*10))/8, nothing
+function dist!(p, data) 
+    results, h, c, e, life = model(p)
+    (abs(life -data.prev_15to65) + abs((h*10) - data.h) + abs((e*10) - data.e) + abs((c*10) - data.c) + abs(results.rr_parents_30 - data.increased_parents_30) + abs(log(results.increased_risk_friends_4)*10 - log(data.increased_friends_4)*10) + abs(log(results.increased_risk_ac_4)*10 - log(data.increased_ac_4)*10) + abs(log(results.increased_risk_spouse_4)*10 - log(data.increased_spouse_4)*10))/8, p
 end
 
 function model(r)
     d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids = pre_setup()
 
-    paras = Parameters(prev = r[1], rate_parents = r[2], rate_friends = r[3], rate_ac = r[4], rate_child = r[5], rate_spouse = r[6], h= r[7], mw_h = r[8],  base_sus = r[9], base_sus_gen=r[10], b=r[11], homophily_friends=r[12], homophily_spouse=r[13], homophily_ac=r[14], b_gen = r[15])
+    paras = Parameters(prev = r[1], rate_parents = r[2], rate_friends = r[3], rate_ac = r[4], rate_child = r[5], rate_spouse = r[6], b_gen = r[7], b = r[8], base_sus = r[9], base_sus_gen=r[10],  homophily_friends=r[11], homophily_spouse=r[12], homophily_ac=r[13],  h= r[14], mw_h = r[15], mw_gen = r[16])
+    
     sim = setup_sim(paras, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
 
     results = run_sim(sim, paras)

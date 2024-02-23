@@ -136,7 +136,8 @@ function standard!(ther_restriction, fdbck_education, fdbck_income, seed = 0)
 
     #println("Qualität der aktuellen Lösung: ", qualcurrentsolution)
 
-    #printgraph!(sim)
+    printgraph!(sim)
+
     #Plots.plot([c1, c2, c3, c4], labels =["1" "2" "3" "4"])
     #Plots.plot([array_depr, array_health], labels = ["depressed: average income" "healthy: average income"])
     #Plots.plot([heal, depr, healhigh, deprhigh, healmiddle, deprmiddle, heallow, deprlow], labels = ["healthy" "depressed" "healthy high ses" "depressed high ses" "healthy middle ses" "depressed middle ses" "healthy low ses" "depressed low ses"])
@@ -191,7 +192,7 @@ end
 #qual = approximation_rr(50) 
 #Plots.plot([qual], labels=["mittlere Abweichung"]) 
 
-#approximation_params_big!(200)
+#approximation_params_big!(100)
 
 calibration_abcde!()
 
@@ -241,3 +242,29 @@ calibration_abcde!()
 #quality_plots!()
 #qual_h, parameter_field= quality_function_para("h")
 #Plots.plot([qual_h], labels = ["mA h"], x = [parameter_field])
+
+
+
+
+
+
+
+
+#Korrelationsplots
+# d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids = pre_setup()
+
+# para = Parameters()
+
+# sim = setup_sim(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids) 
+
+# results = run_sim(sim, para)
+
+# printpara!(sim, results)
+
+
+# ego_f, ego_a, ego_s, ego_p, friendaverage, acaverage, spouse, parentaverage = pl(sim)
+
+# Plots.scatter(ego_f, friendaverage, label = cor(ego_f, friendaverage), alpha = 0.15, mc = "red")
+#Plots.scatter(ego_a, acaverage, label = cor(ego_a, acaverage))
+#Plots.scatter(ego_s, spouse, label = cor(ego_s, spouse))
+
