@@ -11,12 +11,19 @@ function pre_run!(sim, para, years)
     end
 
 end
-function run_sim(sim, para, verbose = false, n_steps = 100)
+function run_sim(sim, para, verbose = false, n_steps = 200)
     #run 100 years first so social network is optimized
     pre_run!(sim, para, 80)
 
     # random point in time to test increased risks 
     rp = sim.time + rand(1:(n_steps-30))
+
+    rp1 = sim.time + rand(1:((n_steps-30)/5))
+    rp2 = sim.time + (n_steps/5) + rand(1:((n_steps-30)/5))
+    rp3 = sim.time + (2*n_steps/5) + rand(1:((n_steps-30)/5))
+    rp4 = sim.time + (3*n_steps/5) + rand(1:((n_steps-30)/5))
+    rp5 = sim.time + (4*n_steps/5) + rand(1:((n_steps-30)/5))
+
     # we keep track of the numbers
     n_depressed = Float64[]
     n_healthy = Float64[]
@@ -55,6 +62,12 @@ function run_sim(sim, para, verbose = false, n_steps = 100)
 
     rr_parents_30 = 0
 
+    fr_t4_array = Float64[]
+    ac_t4_array = Float64[]
+    sp_t4_array = Float64[]
+    par_t4_array = Float64[]
+    ch_t4_array = Float64[]
+    
     # simulation steps
     for t in  1:n_steps
         empty!(sim.pop_currently_depressed)
@@ -76,7 +89,7 @@ function run_sim(sim, para, verbose = false, n_steps = 100)
         end
 
         #calculating increased risks
-        if sim.time == rp
+        if sim.time == rp1 || sim.time == rp2 || sim.time == rp3 || sim.time == rp4 || sim.time == rp5
             pop_t_0_depressed = copy(sim.pop_currently_depressed)
             par_t0, fr_t0, ac_t0, sp_t0, ch_t0 = contacts_t0(pop_t_0_depressed)
 
@@ -88,13 +101,20 @@ function run_sim(sim, para, verbose = false, n_steps = 100)
 
             current_risk_results = currentrisks_t0(sim, pop_t_0_depressed)
         end
-        if sim.time == (rp + 4) #Zeitabstand im Rosenquist Paper
+        if sim.time == (rp1 + 4) || sim.time == (rp2 + 4) || sim.time == (rp3 + 4) || sim.time == (rp4 + 4) || sim.time == (rp5 + 4) #Zeitabstand im Rosenquist Paper
             fr_t4, ac_t4, sp_t4 = contacts_t4(fr_t0, ac_t0, sp_t0, pop_t_0_depressed)
             increased_risk_results = increasedrisks(current_risk_results..., par_t0, fr_t4, ac_t4, sp_t4, ch_t0, sim)
+            push!(fr_t4_array, increased_risk_results.increased_risk_friends_4)
+            push!(ac_t4_array, increased_risk_results.increased_risk_ac_4)
+            push!(sp_t4_array, increased_risk_results.increased_risk_spouse_4)
+            push!(par_t4_array, increased_risk_results.increased_risk_parents_4)
+            push!(ch_t4_array, increased_risk_results.increased_risk_children_4)
+
         end
         if sim.time == (rp + 30) #Zeitabstand bei Rasic et al., 2014 und  RR nicht im zeitlichen Vergleich sondern im Vergleich zu Kinder nichtdepressiver Eltern
             rr_parents_30 =  rr_par_30(pop_t_0_depressed, pop_t_0_nondep, sim)
         end
+
         sim.time += 1
 
         #Daten für Feedback
@@ -117,7 +137,12 @@ function run_sim(sim, para, verbose = false, n_steps = 100)
     #consistencycheck!(sim)
     # return the results (normalized by pop size)
     n = length(sim.pop)
-    (; n_depressed, n_healthy , n_depressed_high, n_healthy_high, n_depressed_middle, n_healthy_middle,  n_depressed_low, n_healthy_low, depr_income, health_income, c1, c2, c3, c4, increased_risk_results..., rr_parents_30)
+    incr4_par = mean(par_t4_array)
+    incr4_fr = mean(fr_t4_array)
+    incr4_ac = mean(ac_t4_array)
+    incr4_sp = mean(sp_t4_array)
+    incr4_ch = mean(ch_t4_array)
+    (; n_depressed, n_healthy , n_depressed_high, n_healthy_high, n_depressed_middle, n_healthy_middle,  n_depressed_low, n_healthy_low, depr_income, health_income, c1, c2, c3, c4, incr4_par, incr4_fr, incr4_ac, incr4_sp, incr4_ch, rr_parents_30)
 end
 
 
@@ -136,12 +161,16 @@ function standard!(ther_restriction, fdbck_education, fdbck_income, seed = 0)
 
     #println("Qualität der aktuellen Lösung: ", qualcurrentsolution)
 
-    printgraph!(sim)
+    #printgraph!(sim)
+
+    episode_array, percentage_array = depressive_episodes(sim)
+    
+    Plots.plot([percentage_array])
 
     #Plots.plot([c1, c2, c3, c4], labels =["1" "2" "3" "4"])
     #Plots.plot([array_depr, array_health], labels = ["depressed: average income" "healthy: average income"])
     #Plots.plot([heal, depr, healhigh, deprhigh, healmiddle, deprmiddle, heallow, deprlow], labels = ["healthy" "depressed" "healthy high ses" "depressed high ses" "healthy middle ses" "depressed middle ses" "healthy low ses" "depressed low ses"])
-    #print_n!(sim)
+    print_n!(sim)
 
 end
 
@@ -192,9 +221,9 @@ end
 #qual = approximation_rr(50) 
 #Plots.plot([qual], labels=["mittlere Abweichung"]) 
 
-#approximation_params_big!(100)
+#approximation_params_big!(60)
 
-calibration_abcde!()
+#calibration_abcde!()
 
 #hier kann sich ein Graph ausgegeben werden, bei dem geschaut wird, wie sich die Qualität der Simulation über den Bereich des Parameters entwickelt
 #mögliche Eingaben= "parent" "friends" "spouse" "child" "ac" "prev" "h"
@@ -204,7 +233,7 @@ calibration_abcde!()
 
 #test!()
 
-#standard!(true, false, false)
+standard!(true, false, false)
 
 
 #histograms_random_effects!(10)

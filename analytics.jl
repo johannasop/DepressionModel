@@ -717,6 +717,11 @@ function printpara!(sim, results)
     println( "** prev (12 months): ", ratedep_12month(sim) )
     println( "lifetime risk of depression: ", deprisk_life(sim))
     println( "** risk of depression between 15 and 65: ", deprisk_life_15to65(sim))
+    println( " ")
+    perc_one, perc_two, perc_three = depressive_episode_analytics(sim)
+    println( "** risk for another episode, if person has at least one depressive episode: ", perc_one)
+    println( "** risk for another episode, if person has at least two depressive episodes: ", perc_two)
+    println( "** risk for another episode, if person has at least three depressive episodes: ", perc_three)
     println(" ")
     println( "prev parents (12 months): ", ratedep_parents_12month(sim) )
     println( "prev parents (life): ", ratedep_parents_life(sim) )
@@ -742,17 +747,17 @@ function printpara!(sim, results)
     println("risk ratio spouse: ", rr_spouse(sim))
     println("risk ratio children: ", rr_children(sim))
     println(" ")
-    println("increased risk if parent is depressed 4 years later: ", results.increased_risk_parents_4 - 1)
-    println("** increased risk if friend is depressed 4 years later: ", results.increased_risk_friends_4 - 1)
-    println("** increased risk if ac is depressed 4 years later: ", results.increased_risk_ac_4 - 1)
-    println("** increased risk if spouse is depressed 4 years later: ", results.increased_risk_spouse_4 - 1)
-    println("increased risk if child is depressed 4 years later: ", results.increased_risk_children_4 - 1)
+    println("increased risk if parent is depressed 4 years later: ", results.incr4_par - 1)
+    println("** increased risk if friend is depressed 4 years later: ", results.incr4_fr - 1)
+    println("** increased risk if ac is depressed 4 years later: ", results.incr4_ac - 1)
+    println("** increased risk if spouse is depressed 4 years later: ", results.incr4_sp - 1)
+    println("increased risk if child is depressed 4 years later: ", results.incr4_ch- 1)
     println(" ")
     h, c, e = heritability_calculations(sim)
     println("Heritabilitätsschätzer: ")
     println("** h: ", h)
-    println("c: ", c)
-    println("e: ", e)
+    println("** c: ", c)
+    println("** e: ", e)
     println("_______________________________________________________________________________")
 end
 
@@ -1170,43 +1175,76 @@ function pl(sim)
     parentaverage = Float64[]
 
     for p in sim.pop
-        f = 0
-        a = 0
-        s = 0
-        pa = 0
+        if p.age > 18
+            f = 0
+            a = 0
+            s = 0
+            pa = 0
 
-        for friend in p.friends
-            f += friend.n_dep_episode
-        end
-        for ac in p.ac
-            a += ac.n_dep_episode
-        end
-        for parent in p.parents
-            pa += parent.n_dep_episode
-        end
+            for friend in p.friends
+                f += friend.n_dep_episode
+            end
+            for ac in p.ac
+                a += ac.n_dep_episode
+            end
+            for parent in p.parents
+                pa += parent.n_dep_episode
+            end
 
 
-        if length(p.spouse) > 0
-            s = p.spouse[1].n_dep_episode
-            push!(spouse, s)
-            push!(ego_s, p.n_dep_episode)
-        end
+            if length(p.spouse) > 0
+                s = p.spouse[1].n_dep_episode
+                push!(spouse, s)
+                push!(ego_s, p.n_dep_episode)
+            end
 
-        if length(p.friends)>0
-            push!(friendaverage, f/length(p.friends))
-            push!(ego_f, p.n_dep_episode)
+            if length(p.friends)>0
+                push!(friendaverage, f/length(p.friends))
+                push!(ego_f, p.n_dep_episode)
 
-        end
-        if length(p.ac)>0
-            push!(acaverage, a/length(p.ac))
-            push!(ego_a, p.n_dep_episode)
-        end
-        if length(p.parents)>0
-            push!(parentaverage, pa/length(p.parents))
-            push!(ego_p, p.n_dep_episode)
+            end
+            if length(p.ac)>0
+                push!(acaverage, a/length(p.ac))
+                push!(ego_a, p.n_dep_episode)
+            end
+            if length(p.parents)>0
+                push!(parentaverage, pa/length(p.parents))
+                push!(ego_p, p.n_dep_episode)
+            end
         end
         
     end
 
     return ego_f, ego_a, ego_s, ego_p, friendaverage, acaverage, spouse, parentaverage
+end
+
+function depressive_episodes(sim)
+    episode_array = Int64[]
+    percentage_array = Float64[]
+
+    sort!(sim.pop_dead, by=p->p.n_dep_episode)
+    dep = count(p->p.n_dep_episode == 0, sim.pop_dead)/length(sim.pop_dead)
+    push!(episode_array, 0)
+    push!(percentage_array, dep)
+
+    for i=1:last(sim.pop_dead).n_dep_episode
+        push!(episode_array, i)
+        push!(percentage_array, count(p->p.n_dep_episode >= i, sim.pop_dead)/length(sim.pop_dead))
+    end
+
+    return episode_array, percentage_array
+end
+
+function depressive_episode_analytics(sim)
+    episode_array, percentage_array = depressive_episodes(sim)
+
+    if length(episode_array)>4
+        perc_one = percentage_array[3]/percentage_array[2]
+        perc_two = percentage_array[4]/percentage_array[3]
+        perc_three = percentage_array[5]/percentage_array[4]
+
+        return perc_one, perc_two, perc_three
+    else
+        return 1.0, 1.0, 1.0
+    end
 end

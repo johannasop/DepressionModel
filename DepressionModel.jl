@@ -90,6 +90,8 @@ mutable struct Simulation{AGENT}
     pop_non_depressed :: Vector{AGENT}
     pop_currently_depressed :: Vector{AGENT}
 
+    pop_dead :: Vector{AGENT}
+
     time::Int64
 end
 
@@ -282,7 +284,7 @@ function newkid!(sim, para)
 
     #SES und susceptibility: gleicher SES wie Eltern aber bisschen andere susceptibility
     newkid.gen_susceptibility = [rand(parent.gen_susceptibility), rand(parent2.gen_susceptibility)]
-    newkid.pheno_susceptibility =  (para.h * ((sum(newkid.gen_susceptibility))/2) + ((1-para.h) * limit(para.base_sus, rand(Normal(para.mw_h,para.b)), 50))) 
+    newkid.pheno_susceptibility =  limit(0, (para.h * (sum(newkid.gen_susceptibility)/2) + ((1-para.h) * rand(myLogNormal(para.mw_h,para.b)))), 100) 
 
     add_eachother!(newkid, newkid.parents, parent, parent.children)
     add_eachother!(newkid, newkid.parents, parent2, parent2.children)
@@ -307,13 +309,13 @@ function newkid!(sim, para)
 
         if rand() < (1/3)
             newtwin.gen_susceptibility = newkid.gen_susceptibility
-            newtwin.pheno_susceptibility = (para.h * ((sum(newtwin.gen_susceptibility))/2) + ((1-para.h) * limit(para.base_sus, rand(Normal(para.mw_h,para.b)), 50))) 
+            newtwin.pheno_susceptibility = limit(0, (para.h * (sum(newtwin.gen_susceptibility)/2) + ((1-para.h) * rand(myLogNormal(para.mw_h,para.b)))), 100) 
             if sim.time > 0
                 push!(sim.pop_identical_twins, newtwin)
             end
         else
             newtwin.gen_susceptibility = [rand(parent.gen_susceptibility), rand(parent2.gen_susceptibility)]
-            newtwin.pheno_susceptibility = (para.h * ((sum(newtwin.gen_susceptibility))/2) + ((1-para.h) * limit(para.base_sus, rand(Normal(para.mw_h,para.b)), 50))) 
+            newtwin.pheno_susceptibility = limit(0, (para.h * (sum(newtwin.gen_susceptibility)/2) + ((1-para.h) * rand(myLogNormal(para.mw_h,para.b)))), 100) 
             if sim.time > 0
                 push!(sim.pop_fraternal_twins, newtwin)
             end
@@ -331,6 +333,10 @@ end
 
 function death!(person, sim)
     person.alive=false
+
+    if sim.time>0
+        push!(sim.pop_dead, person)
+    end
 
     #Sterbeprozess
     #Partner der sterbenden Person: falls vorhanden wird wieder single und von Liste potentieller Eltern entfernt, gemeinsam mit sterbender Person
@@ -756,6 +762,14 @@ function del_unsorted!(person, list)
     list[idx] = last(list)
     pop!(list)
 	true
+end
+
+function myLogNormal(m,std)
+    γ = 1+std^2/m^2
+    μ = log(m/sqrt(γ))
+    σ = sqrt(log(γ))
+
+    LogNormal(μ,σ)
 end
 
 function update_agents!(sim, para)

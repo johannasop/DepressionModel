@@ -1,15 +1,19 @@
 Base.@kwdef struct Optimalparams
-    prev_12month::Float64 = 7.5
-    prev_15to65::Float64 = 2.5
+    prev_12month::Float64 = 0.075
+    prev_15to65::Float64 = 0.25
 
-    h::Float64 = 3.7
+    h::Float64 = 0.37
     c::Float64 = 0.0
-    e::Float64 = 0.3
-    increased_parents_30::Float64 = 3.0
+    e::Float64 = 0.63
+
+    increased_parents_30::Float64 = 0.30 #Achtung: Ergebnis aus Funktion muss dann in Kalibierung durch 10 geteilt werden
     increased_friends_4::Float64 = 4.59
     increased_ac_4::Float64 = 2.18
     increased_spouse_4::Float64 = 1.5
     
+    dep_episode_one_more::Float64 = 0.50
+    dep_episode_two_more::Float64 = 0.75
+    dep_episode_three_more::Float64 = 0.90
 end
 
 Base.@kwdef struct Optimalrates
@@ -38,8 +42,10 @@ function evaluationparams(sim, rr_parents_30, increasedrisk_friends, increasedri
     #Evaluation aller belegten Parameter
     o = Optimalparams()
     h, c, e = heritability_calculations(sim)
+    perc_one, perc_two, perc_three = depressive_episode_analytics(sim)
 
-    return ((o.prev_15to65 - (deprisk_life_15to65(sim)*10))^2 + (o.h - (h*10))^2 + (o.e - (e*10))^2 + (o.c - (c*10))^2 + (o.increased_parents_30 - rr_parents_30)^2 + (log(o.increased_friends_4)*10 - log(increasedrisk_friends)*10)^2 + (log(o.increased_ac_4)*10 - log(increasedrisk_ac)*10)^2 + (log(o.increased_spouse_4)*10 - log(increasedrisk_spouse)*10)^2 )/9
+    return ((abs(deprisk_life_15to65(sim) -o.prev_15to65)*10 + abs(h - o.h) + abs(e - o.e) + abs(c - o.c) + abs(rr_parents_30/10- o.increased_parents_30) + abs(log(increasedrisk_friends)- o.increased_friends_4) + abs(log(increasedrisk_ac) - o.increased_ac_4) + abs(log(increasedrisk_spouse)- o.increased_spouse_4)) + abs(perc_one - o.dep_episode_one_more) + abs(perc_two - o.dep_episode_two_more)+ abs(perc_three - o.dep_episode_three_more))/11
+
 
 end
 
@@ -70,7 +76,7 @@ function eval_params_multipleseeds(new_paras, d_sum_m, d_sum_f, d_sum_kids, data
         new_paras.seed = 0#rand(1:100)
         sim = setup_sim(new_paras, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
         results = run_sim(sim, new_paras)
-        meanfit = meanfit + evaluationparams(sim, results.rr_parents_30, results.increased_risk_friends_4, results.increased_risk_ac_4, results.increased_risk_spouse_4)
+        meanfit = meanfit + evaluationparams(sim, results.rr_parents_30, results.incr4_fr, results.incr4_ac, results.incr4_sp)
 
     end
 
@@ -202,7 +208,7 @@ end
 
 function randpara()
 
-    return Parameters(prev = rand(0.0:3.0), rate_parents= rand(0.0:3.0), rate_friends=rand(0.0:3.0), rate_ac = rand(0.0:3.0), rate_child = rand(0.0:3.0), rate_spouse = rand(0.0:3.0), h= rand(), mw_h = rand(-10.0:10.0),  base_sus = rand(0.0:10.0), base_sus_gen=rand(-10.0:10.0), b=rand(0.0:10.0), homophily_friends=rand(0:1), homophily_spouse=rand(0:1), homophily_ac=rand(0:1), b_gen = rand(0:1))
+    return Parameters(prev = rand(0.0:3.0), rate_parents= rand(0.0:3.0), rate_friends=rand(0.0:3.0), rate_ac = rand(0.0:3.0), rate_child = rand(0.0:3.0), rate_spouse = rand(0.0:3.0), h= rand(),  b=rand(0.0:10.0), homophily_friends=rand(), homophily_spouse=rand(), homophily_ac=rand())
 
 end
 
@@ -212,7 +218,7 @@ end
 
 function paraplusnorm(paras)
     
-    new_paras = Parameters(prev=limit(0, paras.prev + rand(Normal(0,1.0)), 10), rate_parents = limit(0, paras.rate_parents + rand(Normal(0,1.0)), 10), rate_friends = limit(0, paras.rate_friends + rand(Normal(0,1.0)), 10), rate_ac = limit(0, paras.rate_ac + rand(Normal(0,1.0)), 10), rate_child = limit(0, paras.rate_child + rand(Normal(0,1.0)), 10), rate_spouse = limit(0, paras.rate_spouse + rand(Normal(0,1.0)), 10), h = limit(0, paras.h + rand(Normal(0,0.1)), 1), mw_h = limit(-10, paras.mw_h + rand(Normal(0, 1.0)), 10), base_sus = limit(0.0, paras.base_sus + rand(Normal(0, 1.0)), 10), base_sus_gen = limit(0.0, paras.base_sus_gen + rand(Normal(0, 1.0)), 10), b = limit(0, paras.b + rand(Normal(0,1.0)), 5), b_gen = limit(0, paras.b_gen + rand(Normal(0, 1.0)), 5), homophily_ac = limit(0, paras.homophily_ac + rand(Normal(0, 0.1)), 1), homophily_friends = limit(0, paras.homophily_friends + rand(Normal(0, 0.1)), 1) , homophily_spouse = limit(0, paras.homophily_spouse + rand(Normal(0, 0.1)), 1))
+    new_paras = Parameters(prev=limit(0, paras.prev + rand(Normal(0,1.0)), 10), rate_parents = limit(0, paras.rate_parents + rand(Normal(0,1.0)), 10), rate_friends = limit(0, paras.rate_friends + rand(Normal(0,1.0)), 10), rate_ac = limit(0, paras.rate_ac + rand(Normal(0,1.0)), 10), rate_child = limit(0, paras.rate_child + rand(Normal(0,1.0)), 10), rate_spouse = limit(0, paras.rate_spouse + rand(Normal(0,1.0)), 10), h = limit(0, paras.h + rand(Normal(0,0.1)), 1), mw_h = limit(-10, paras.mw_h + rand(Normal(0, 1.0)), 10), b = limit(0, paras.b + rand(Normal(0,1.0)), 5), homophily_ac = limit(0, paras.homophily_ac + rand(Normal(0, 0.1)), 1), homophily_friends = limit(0, paras.homophily_friends + rand(Normal(0, 0.1)), 1) , homophily_spouse = limit(0, paras.homophily_spouse + rand(Normal(0, 0.1)), 1))
 
     return new_paras
 end
@@ -379,39 +385,53 @@ function calibration_abcde!()
 
     ϵ = 1.0
 
-    priors = Product([Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(0,1), Uniform(0,1), Uniform(0,1), Uniform(0,1), Uniform(-10, 10), Uniform(-10, 10)]) 
+    priors = Product([Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(-10,10), Uniform(0,1), Uniform(0,1), Uniform(0,1), Uniform(0,1)]) 
 
-    r1 = abcdesmc!(priors, dist!, ϵ , data, nparticles=100, nsims_max = 120000, parallel = true)
+    r1 = abcdesmc!(priors, dist!, ϵ , data, nparticles=100, nsims_max = 50000, parallel = true)
 
-    posterior = [t[1] for t in r1.P[r1.Wns .> 0.0]]
+    print(r1)
+    posterior_prev = [t[1] for t in r1.P[r1.Wns .> 0.0]]
+    posterior_par = [t[2] for t in r1.P[r1.Wns .> 0.0]]
+    posterior_fr = [t[3] for t in r1.P[r1.Wns .> 0.0]]
+    posterior_ac = [t[4] for t in r1.P[r1.Wns .> 0.0]]
+    posterior_ch = [t[5] for t in r1.P[r1.Wns .> 0.0]]
+    posterior_sp = [t[6] for t in r1.P[r1.Wns .> 0.0]]
+    posterior_b = [t[7] for t in r1.P[r1.Wns .> 0.0]]
+    posterior_mw_h = [t[8] for t in r1.P[r1.Wns .> 0.0]]
+    posterior_hom_fr = [t[9] for t in r1.P[r1.Wns .> 0.0]]
+    posterior_hom_sp = [t[10] for t in r1.P[r1.Wns .> 0.0]]
+    posterior_hom_ac = [t[11] for t in r1.P[r1.Wns .> 0.0]]
+    posterior_h = [t[12] for t in r1.P[r1.Wns .> 0.0]]
+
     evidence = exp(r1.logZ)
 
-    println(posterior)
     println(evidence)
-    println(blobs)
-
-    Plots.plot!(posterior)
 
     blobs = r1.blobs[r1.Wns .> 0.0]
+    println(blobs)
+
+    Plots.histogram(posterior_prev, normed=true)
     
 end
 
 function dist!(p, data) 
-    results, h, c, e, life = model(p)
-    (abs(life -data.prev_15to65) + abs((h*10) - data.h) + abs((e*10) - data.e) + abs((c*10) - data.c) + abs(results.rr_parents_30 - data.increased_parents_30) + abs(log(results.increased_risk_friends_4)*10 - log(data.increased_friends_4)*10) + abs(log(results.increased_risk_ac_4)*10 - log(data.increased_ac_4)*10) + abs(log(results.increased_risk_spouse_4)*10 - log(data.increased_spouse_4)*10))/8, p
+    results, h, c, e, life, perc_one, perc_two, perc_three = model(p)
+    ((abs(life -data.prev_15to65)*10 + abs(h - data.h) + abs(e - data.e) + abs(c - data.c) + abs((results.rr_parents_30/10) - data.increased_parents_30) + abs(log(results.incr4_fr)- log(data.increased_friends_4)) + abs(log(results.incr4_ac) - log(data.increased_ac_4)) + abs(log(results.incr4_sp)- log(data.increased_spouse_4))) + abs(perc_one - data.dep_episode_one_more) + abs(perc_two - data.dep_episode_two_more)+ abs(perc_three - data.dep_episode_three_more)), p
 end
 
 function model(r)
     d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids = pre_setup()
 
-    paras = Parameters(prev = r[1], rate_parents = r[2], rate_friends = r[3], rate_ac = r[4], rate_child = r[5], rate_spouse = r[6], b_gen = r[7], b = r[8], base_sus = r[9], base_sus_gen=r[10],  homophily_friends=r[11], homophily_spouse=r[12], homophily_ac=r[13],  h= r[14], mw_h = r[15], mw_gen = r[16])
+    paras = Parameters(prev = r[1], rate_parents = r[2], rate_friends = r[3], rate_ac = r[4], rate_child = r[5], rate_spouse = r[6], b = r[7], mw_h = r[8], homophily_friends=r[9], homophily_spouse=r[10], homophily_ac=r[11],  h= r[12])
     
     sim = setup_sim(paras, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
 
     results = run_sim(sim, paras)
     h, c, e = heritability_calculations(sim)
     life = deprisk_life_15to65(sim)*10
-    return results, h, c, e, life
+
+    perc_one, perc_two, perc_three = depressive_episode_analytics(sim)
+    return results, h, c, e, life, perc_one, perc_two, perc_three
 end
 
 function optimization_current_para(steps, npoints=600)

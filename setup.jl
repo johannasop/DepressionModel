@@ -58,8 +58,8 @@ function setup_mixed(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kid
     for i in eachindex(men)
          men[i].education = rand(1:4)
          calculateincome!(men[i], para)
-         men[i].gen_susceptibility = [limit(para.base_sus_gen, rand(Normal(para.mw_gen, para.b_gen)), 50), limit(para.base_sus_gen, rand(Normal(para.mw_gen, para.b_gen)), 50)]
-         men[i].pheno_susceptibility = (para.h* (sum(men[i].gen_susceptibility)/2) ) + ((1-para.h) * limit(para.base_sus, rand(Normal(para.mw_h,para.b)), 50))
+         men[i].gen_susceptibility =[rand(Exponential(1)), rand(Exponential(1))]
+         men[i].pheno_susceptibility = limit(0, (para.h* sum(men[i].gen_susceptibility)/2) + ((1-para.h) * rand(myLogNormal(para.mw_h,para.b))), 100)
 
          setprobther!(men[i], para)
     end
@@ -114,8 +114,8 @@ function setup_mixed(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kid
         calculateincome!(woman, para)
         setprobther!(woman, para)
 
-        woman.gen_susceptibility = [limit(para.base_sus_gen, rand(Normal(para.mw_gen, para.b_gen)), 50), limit(para.base_sus_gen, rand(Normal(para.mw_gen, para.b_gen)), 50)]
-        woman.pheno_susceptibility = (para.h* (sum(woman.gen_susceptibility)/2) ) + ((1-para.h) * limit(para.base_sus, rand(Normal(para.mw_h,para.b)), 50))
+        woman.gen_susceptibility = [rand(Exponential(1)), rand(Exponential(1))]
+        woman.pheno_susceptibility = limit(0, (para.h* (sum(woman.gen_susceptibility)/2) + ((1-para.h) * rand(myLogNormal(para.mw_h,para.b)))), 100)
     end
 
     #ordne Kinder diesen Partnern zu
@@ -124,8 +124,8 @@ function setup_mixed(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kid
         parent = pop[rand(1:(para.n_fam*2))]
 
         #die sus der Kinder besteht zu einem Teil aus der der Eltern und zu einem Teil aus Umwelteinflüssen: Anteile können über para.h verändert werden
-        kid.gen_susceptibility = [rand(parent.gen_susceptibility), rand(parent.spouse[1].gen_susceptibility)]
-        kid.pheno_susceptibility = (para.h* (sum(kid.gen_susceptibility)/2) ) + ((1-para.h) * limit(para.base_sus, rand(Normal(para.mw_h,para.b)), 50))
+        kid.gen_susceptibility = [rand(Exponential(1)), rand(Exponential(1))]
+        kid.pheno_susceptibility = limit(0, (para.h* (sum(kid.gen_susceptibility)/2)) + ((1-para.h) * rand(myLogNormal(para.mw_h,para.b))), 100)
 
 
         push!(pop, kid)
@@ -147,8 +147,8 @@ function setup_mixed(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kid
         women[i].education = rand(1:4)
         calculateincome!(women[i], para)
 
-        women[i].gen_susceptibility = [limit(para.base_sus_gen, rand(Normal(para.mw_gen, para.b_gen)), 50), limit(para.base_sus_gen, rand(Normal(para.mw_gen, para.b_gen)), 50)]
-        women[i].pheno_susceptibility = (para.h* (sum(women[i].gen_susceptibility)/2) ) + ((1-para.h) * limit(para.base_sus, rand(Normal(para.mw_h,para.b)), 50))
+        women[i].gen_susceptibility = [rand(Exponential(1)), rand(Exponential(1))]
+        women[i].pheno_susceptibility = limit(0, (para.h* sum(women[i].gen_susceptibility/2)) + ((1-para.h) * rand(myLogNormal(para.mw_h,para.b))), 100)
 
         setprobther!(women[i], para)
     end
@@ -177,7 +177,9 @@ function  setup_sim(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids
     pop_depressed = SimplePerson[]
     pop_non_depressed = SimplePerson[]
     pop_currently_depressed = SimplePerson[]
+    pop_dead = SimplePerson[]
+
     # create a simulation object with parameter values
-    sim = Simulation(pop, pop_singles, pop_potentialparents, pop_identical_twins, pop_fraternal_twins, pop_depressed, pop_non_depressed, pop_currently_depressed, 0)
+    sim = Simulation(pop, pop_singles, pop_potentialparents, pop_identical_twins, pop_fraternal_twins, pop_depressed, pop_non_depressed, pop_currently_depressed, pop_dead, 0)
     sim
 end
