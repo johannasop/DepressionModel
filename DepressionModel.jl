@@ -284,7 +284,7 @@ function newkid!(sim, para)
 
     #SES und susceptibility: gleicher SES wie Eltern aber bisschen andere susceptibility
     newkid.gen_susceptibility = [rand(parent.gen_susceptibility), rand(parent2.gen_susceptibility)]
-    newkid.pheno_susceptibility =  limit(0, (para.h * (sum(newkid.gen_susceptibility)/2) + ((1-para.h) * rand(myLogNormal(para.mw_h,para.b)))), 100) 
+    newkid.pheno_susceptibility =  limit(0, (para.h * (sum(newkid.gen_susceptibility)/2) + ((1-para.h) * rand(Exponential(para.lambda_e)))), 100) 
 
     add_eachother!(newkid, newkid.parents, parent, parent.children)
     add_eachother!(newkid, newkid.parents, parent2, parent2.children)
@@ -309,13 +309,13 @@ function newkid!(sim, para)
 
         if rand() < (1/3)
             newtwin.gen_susceptibility = newkid.gen_susceptibility
-            newtwin.pheno_susceptibility = limit(0, (para.h * (sum(newtwin.gen_susceptibility)/2) + ((1-para.h) * rand(myLogNormal(para.mw_h,para.b)))), 100) 
+            newtwin.pheno_susceptibility = limit(0, (para.h * (sum(newtwin.gen_susceptibility)/2) + ((1-para.h) * rand(Exponential(para.lambda_e)))), 100) 
             if sim.time > 0
                 push!(sim.pop_identical_twins, newtwin)
             end
         else
             newtwin.gen_susceptibility = [rand(parent.gen_susceptibility), rand(parent2.gen_susceptibility)]
-            newtwin.pheno_susceptibility = limit(0, (para.h * (sum(newtwin.gen_susceptibility)/2) + ((1-para.h) * rand(myLogNormal(para.mw_h,para.b)))), 100) 
+            newtwin.pheno_susceptibility = limit(0, (para.h * (sum(newtwin.gen_susceptibility)/2) + ((1-para.h) * rand(Exponential(para.lambda_e)))), 100) 
             if sim.time > 0
                 push!(sim.pop_fraternal_twins, newtwin)
             end

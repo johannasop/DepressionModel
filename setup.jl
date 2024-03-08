@@ -58,8 +58,8 @@ function setup_mixed(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kid
     for i in eachindex(men)
          men[i].education = rand(1:4)
          calculateincome!(men[i], para)
-         men[i].gen_susceptibility =[rand(Exponential(1)), rand(Exponential(1))]
-         men[i].pheno_susceptibility = limit(0, (para.h* sum(men[i].gen_susceptibility)/2) + ((1-para.h) * rand(myLogNormal(para.mw_h,para.b))), 100)
+         men[i].gen_susceptibility =[rand(Exponential(para.lambda)), rand(Exponential(para.lambda))]
+         men[i].pheno_susceptibility = limit(0, (para.h* sum(men[i].gen_susceptibility)/2) + ((1-para.h) * rand(Exponential(para.lambda_e))), 100)
 
          setprobther!(men[i], para)
     end
@@ -114,8 +114,8 @@ function setup_mixed(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kid
         calculateincome!(woman, para)
         setprobther!(woman, para)
 
-        woman.gen_susceptibility = [rand(Exponential(1)), rand(Exponential(1))]
-        woman.pheno_susceptibility = limit(0, (para.h* (sum(woman.gen_susceptibility)/2) + ((1-para.h) * rand(myLogNormal(para.mw_h,para.b)))), 100)
+        woman.gen_susceptibility = [rand(Exponential(para.lambda)), rand(Exponential(para.lambda))]
+        woman.pheno_susceptibility = limit(0, (para.h* (sum(woman.gen_susceptibility)/2) + ((1-para.h) * rand(Exponential(para.lambda_e)))), 100)
     end
 
     #ordne Kinder diesen Partnern zu
@@ -124,8 +124,8 @@ function setup_mixed(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kid
         parent = pop[rand(1:(para.n_fam*2))]
 
         #die sus der Kinder besteht zu einem Teil aus der der Eltern und zu einem Teil aus Umwelteinflüssen: Anteile können über para.h verändert werden
-        kid.gen_susceptibility = [rand(Exponential(1)), rand(Exponential(1))]
-        kid.pheno_susceptibility = limit(0, (para.h* (sum(kid.gen_susceptibility)/2)) + ((1-para.h) * rand(myLogNormal(para.mw_h,para.b))), 100)
+        kid.gen_susceptibility = [rand(Exponential(para.lambda)), rand(Exponential(para.lambda))]
+        kid.pheno_susceptibility = limit(0, (para.h* (sum(kid.gen_susceptibility)/2)) + ((1-para.h) * rand(Exponential(para.lambda_e))), 100)
 
 
         push!(pop, kid)
@@ -147,8 +147,8 @@ function setup_mixed(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kid
         women[i].education = rand(1:4)
         calculateincome!(women[i], para)
 
-        women[i].gen_susceptibility = [rand(Exponential(1)), rand(Exponential(1))]
-        women[i].pheno_susceptibility = limit(0, (para.h* sum(women[i].gen_susceptibility/2)) + ((1-para.h) * rand(myLogNormal(para.mw_h,para.b))), 100)
+        women[i].gen_susceptibility = [rand(Exponential(para.lambda)), rand(Exponential(para.lambda))]
+        women[i].pheno_susceptibility = limit(0, (para.h* sum(women[i].gen_susceptibility/2)) + ((1-para.h) * rand(Exponential(para.lambda_e))), 100)
 
         setprobther!(women[i], para)
     end

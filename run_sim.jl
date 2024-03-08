@@ -170,7 +170,7 @@ function standard!(ther_restriction, fdbck_education, fdbck_income, seed = 0)
     #Plots.plot([c1, c2, c3, c4], labels =["1" "2" "3" "4"])
     #Plots.plot([array_depr, array_health], labels = ["depressed: average income" "healthy: average income"])
     #Plots.plot([heal, depr, healhigh, deprhigh, healmiddle, deprmiddle, heallow, deprlow], labels = ["healthy" "depressed" "healthy high ses" "depressed high ses" "healthy middle ses" "depressed middle ses" "healthy low ses" "depressed low ses"])
-    print_n!(sim)
+    #print_n!(sim)
 
 end
 
@@ -222,6 +222,7 @@ end
 #Plots.plot([qual], labels=["mittlere Abweichung"]) 
 
 #approximation_params_big!(60)
+
 
 #calibration_abcde!()
 
