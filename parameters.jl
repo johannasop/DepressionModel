@@ -1,5 +1,3 @@
-
-
 Base.@kwdef mutable struct Parameters
 
     prev::Float64 = 8.33725765360481
@@ -20,7 +18,6 @@ Base.@kwdef mutable struct Parameters
     seed::Int64 = 0
 
     lambda::Float64 = 1.0
-    lambda_e::Float64 = 1.0
     #Breite der Verteilung der susceptibility des Zufalls
     b::Float64 = 3.037428314947738
     mw_h::Float64 = -4.7
