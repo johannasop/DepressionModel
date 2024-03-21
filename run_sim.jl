@@ -103,7 +103,7 @@ function run_sim(sim, para, verbose = false, n_steps = 200)
         end
         if sim.time == (rp1 + 4) || sim.time == (rp2 + 4) || sim.time == (rp3 + 4) || sim.time == (rp4 + 4) || sim.time == (rp5 + 4) #Zeitabstand im Rosenquist Paper
             fr_t4, ac_t4, sp_t4 = contacts_t4(fr_t0, ac_t0, sp_t0, pop_t_0_depressed)
-            increased_risk_results = increasedrisks(current_risk_results..., par_t0, fr_t4, ac_t4, sp_t4, ch_t0, sim)
+            increased_risk_results = increasedrisks(current_risk_results..., par_t0, fr_t4, ac_t4, sp_t4, ch_t0, sim, para)
             push!(fr_t4_array, increased_risk_results.increased_risk_friends_4)
             push!(ac_t4_array, increased_risk_results.increased_risk_ac_4)
             push!(sp_t4_array, increased_risk_results.increased_risk_spouse_4)
@@ -167,6 +167,7 @@ function standard!(ther_restriction, fdbck_education, fdbck_income, seed = 0)
     
     Plots.plot([percentage_array])
 
+    
     #Plots.plot([c1, c2, c3, c4], labels =["1" "2" "3" "4"])
     #Plots.plot([array_depr, array_health], labels = ["depressed: average income" "healthy: average income"])
     #Plots.plot([heal, depr, healhigh, deprhigh, healmiddle, deprmiddle, heallow, deprlow], labels = ["healthy" "depressed" "healthy high ses" "depressed high ses" "healthy middle ses" "depressed middle ses" "healthy low ses" "depressed low ses"])
@@ -218,6 +219,18 @@ function test!()
     end
 end
 
+function distri!()
+
+    x = 0.0
+    array = Float64[]
+
+    for i=1:1000
+        push!(array, limit(0, rand(Exponential(0.29)), 100))
+    end
+    sort!(array)
+    Plots.histogram(array, bins = 100)
+
+end
 
 #qual = approximation_rr(50) 
 #Plots.plot([qual], labels=["mittlere Abweichung"]) 
@@ -235,6 +248,7 @@ calibration_abcde!()
 #test!()
 
 #standard!(true, false, false)
+#distri!()
 
 
 #histograms_random_effects!(10)

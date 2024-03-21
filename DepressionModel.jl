@@ -17,6 +17,7 @@ using Colors
 using Karnak
 using ABCdeZ
 using Distances
+using StatsBase
 
 include("parameters.jl") 
 
@@ -50,6 +51,7 @@ mutable struct SimplePerson
 
     gen_susceptibility::Vector{Float64}
     pheno_susceptibility::Float64
+    environmental_risk::Vector{Float64}
     risk::Float64
 
     #estimated length of current relationship and current duration
@@ -70,8 +72,8 @@ end
 
 
 # how we construct a person object
-SimplePerson() = SimplePerson(true,[], [], [], [], [], [], 0, healthy, 0, 0, 0, [], 0, 0, 0, 0, [], 0, 0, 0)   # default Person is susceptible and has no contacts
-SimplePerson(state) = SimplePerson(true,[], [], [], [], [], [], 0, state, 0, 0, 0, [], 0, 0, 0, 0, [], 0, 0, 0)  # default Person has no contacts
+SimplePerson() = SimplePerson(true,[], [], [], [], [], [], 0, healthy, 0, 0, 0, [], 0, [], 0, 0, 0, [], 0, 0, 0)   # default Person is susceptible and has no contacts
+SimplePerson(state) = SimplePerson(true,[], [], [], [], [], [], 0, state, 0, 0, 0, [], 0, [], 0, 0, 0, [], 0, 0, 0)  # default Person has no contacts
 
 
 # this is a parametric type
@@ -125,15 +127,25 @@ function update!(person, sim, para)
         rate += para.rate_spouse
     end
     
-    if rate == 0
-        rate += para.prev
-    end
+    
+    rate += para.prev
+    
 
-    person.risk = ratetoprob(rate * person.pheno_susceptibility)
+    
+    if length(person.environmental_risk) > 0 
+        rate_plus_experience = (para.w_mean * rate) + ((1-para.w_mean) * last(person.environmental_risk))
+    else
+        rate_plus_experience = rate
+    end
+    push!(person.environmental_risk, rate_plus_experience)
+
+    person.risk = ratetoprob(rate_plus_experience * person.pheno_susceptibility)
+    
     if person.age >= 15 && rand() < person.risk
         person.state = depressed
         push!(sim.pop_currently_depressed, person)
     end
+
   
     #Spontanremmisionen 
     if person.state == depressed && rand() < ratetoprob(para.rem)
@@ -149,6 +161,8 @@ function update!(person, sim, para)
     if person.state == depressed
         therapy!(person, para)
     end
+
+    return rate
 end
 
 function population_update!(person, sim, para)

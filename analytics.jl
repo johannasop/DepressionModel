@@ -389,7 +389,7 @@ function contacts_t4(fr, ac, sp, pop_t0)
     return fri_t4, ac_t4, sp_t4
 end
 #increased risk compared to different point in time
-function increasedrisks(former_risk_children, former_risk_friends, former_risk_ac, former_risk_parents, former_risk_spouse, par_t0, fri_t4, ac_t4, sp_t4, ch_t0, sim)
+function increasedrisks(former_risk_children, former_risk_friends, former_risk_ac, former_risk_parents, former_risk_spouse, par_t0, fri_t4, ac_t4, sp_t4, ch_t0, sim, para)
 
     i_ctr_ch = DeprCounter()
     i_ctr_fr = DeprCounter()
@@ -410,11 +410,11 @@ function increasedrisks(former_risk_children, former_risk_friends, former_risk_a
     current_risk_children = depr_ratio(i_ctr_par)
 
 
-    return (increased_risk_parents_4 = (current_risk_children/former_risk_children), 
-	    increased_risk_friends_4 = (current_risk_friends/former_risk_friends), 
-	    increased_risk_ac_4 = (current_risk_ac/former_risk_ac), 
-	    increased_risk_children_4 = (current_risk_parents/former_risk_parents), 
-	    increased_risk_spouse_4 = (current_risk_spouse/former_risk_spouse))
+    return (increased_risk_parents_4 = para.scaling * (current_risk_children/former_risk_children), 
+	    increased_risk_friends_4 = para.scaling * (current_risk_friends/former_risk_friends), 
+	    increased_risk_ac_4 = para.scaling * (current_risk_ac/former_risk_ac), 
+	    increased_risk_children_4 = para.scaling * (current_risk_parents/former_risk_parents), 
+	    increased_risk_spouse_4 = para.scaling* (current_risk_spouse/former_risk_spouse))
 end
 
 

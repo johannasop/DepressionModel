@@ -383,13 +383,12 @@ function calibration_abcde!()
     data = Optimalparams()
     #priors = Product([Uniform(0,10) for i=1:10]), [Uniform(0,1) for i=1:4], [Uniform(-10, 10) for i = 1:2]
 
-    ϵ = 1.0
+    ϵ = 0.5
 
-    priors = Product([Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(-10,10), Uniform(0,1), Uniform(0,1), Uniform(0,1), Uniform(0,1), Uniform(0,10)]) 
+    priors = Product([Uniform(0,10), Uniform(0,10), Uniform(0,20), Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(-10,10), Uniform(0,1), Uniform(0,1), Uniform(0,1), Uniform(0,1), Uniform(0,10), Uniform(0,10), Uniform(0,1)]) 
 
-    r1 = abcdesmc!(priors, dist!, ϵ , data, nparticles=100, nsims_max = 5000, parallel = true)
+    r1 = abcdesmc!(priors, dist!, ϵ , data, nparticles=100, nsims_max = 250000, parallel = true)
 
-    print(r1)
     posterior_prev = [t[1] for t in r1.P[r1.Wns .> 0.0]]
     posterior_par = [t[2] for t in r1.P[r1.Wns .> 0.0]]
     posterior_fr = [t[3] for t in r1.P[r1.Wns .> 0.0]]
@@ -402,22 +401,37 @@ function calibration_abcde!()
     posterior_hom_sp = [t[10] for t in r1.P[r1.Wns .> 0.0]]
     posterior_hom_ac = [t[11] for t in r1.P[r1.Wns .> 0.0]]
     posterior_h = [t[12] for t in r1.P[r1.Wns .> 0.0]]
+    posterior_lambda = [t[13] for t in r1.P[r1.Wns .> 0.0]]
+    posterior_scaling = [t[14] for t in r1.P[r1.Wns .> 0.0]]
+
 
     evidence = exp(r1.logZ)
-
-    println(evidence)
-
     blobs = r1.blobs[r1.Wns .> 0.0]
-    println(blobs)
 
-    Plots.histogram(posterior_prev, normed=true)
+    present_solution_abcde!(r1)
+
+    Plots.histogram(posterior_prev, normed=true, bins = 10, labels = "posterior prev", xrange = (0,10))
+    Plots.histogram(posterior_par, normed=true, bins = 10, labels = "posterior par", xrange = (0,10))
+    Plots.histogram(posterior_fr, normed=true, bins = 10, labels = "posterior fr", xrange = (0,10))
+    Plots.histogram(posterior_ac, normed=true, bins = 10, labels = "posterior ac", xrange = (0,10))
+    Plots.histogram(posterior_ch, normed=true, bins = 10, labels = "posterior ch", xrange = (0,10))
+    Plots.histogram(posterior_sp, normed=true, bins = 10, labels = "posterior spouse", xrange = (0,10))
+    Plots.histogram(posterior_b, normed=true, bins = 10, labels = "posterior b", xrange = (0,10))
+    Plots.histogram(posterior_mw_h, normed=true, bins = 10, labels = "posterior mw_h", xrange = (-10,10))
+    Plots.histogram(posterior_hom_fr, normed=true, bins = 10, labels = "posterior hom_fr", xrange = (0,1))
+    Plots.histogram(posterior_hom_sp, normed=true, bins = 10, labels = "posterior hom_sp", xrange = (0,1))
+    Plots.histogram(posterior_hom_ac, normed=true, bins = 10, labels = "posterior hom_ac", xrange = (0,1))
+    Plots.histogram(posterior_h, normed=true, bins = 10, labels = "posterior h", xrange = (0,1))
+    Plots.histogram(posterior_lambda, normed=true, bins = 10, labels = "posterior lambda", xrange = (0,1))
+    Plots.histogram(posterior_scaling, normed=true, bins = 10, labels = "posterior scaling", xrange = (0,10))
+
     
 end
 
 function dist!(p, data) 
     results, h, c, e, life, prev, perc_one, perc_two, perc_three = model(p)
-    results_vector = [prev, life, h, c, e, results.rr_parents_30/10, results.incr4_fr, results.incr4_ac, results.incr4_sp, perc_one, perc_two, perc_three]
-    data_vector = [data.prev_12month, data.prev_15to65, data.h, data.c, data.e, data.increased_parents_30, data.increased_friends_4, data.increased_ac_4, data.increased_spouse_4, data.dep_episode_one_more, data.dep_episode_two_more, data.dep_episode_three_more]
+    results_vector = [prev, life, h, c, e, results.rr_parents_30/10, log(results.incr4_fr), log(results.incr4_ac), log(results.incr4_sp), perc_one, perc_two, perc_three]
+    data_vector = [data.prev_12month, data.prev_15to65, data.h, data.c, data.e, data.increased_parents_30, log(data.increased_friends_4), log(data.increased_ac_4), log(data.increased_spouse_4), data.dep_episode_one_more, data.dep_episode_two_more, data.dep_episode_three_more]
 
     Distances.euclidean(results_vector, data_vector), Distances.euclidean(results_vector, data_vector)
 end
@@ -425,17 +439,88 @@ end
 function model(r)
     d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids = pre_setup()
 
-    paras = Parameters(prev = r[1], rate_parents = r[2], rate_friends = r[3], rate_ac = r[4], rate_child = r[5], rate_spouse = r[6], b = r[7], mw_h = r[8], homophily_friends=r[9], homophily_spouse=r[10], homophily_ac=r[11],  h= r[12], lambda = r[13])
+    paras = Parameters(prev = r[1], rate_parents = r[2], rate_friends = r[3], rate_ac = r[4], rate_child = r[5], rate_spouse = r[6], b = r[7], mw_h = r[8], homophily_friends=r[9], homophily_spouse=r[10], homophily_ac=r[11],  h= r[12], lambda = r[13], scaling = r[14], w_mean = r[15])
     
     sim = setup_sim(paras, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
 
     results = run_sim(sim, paras)
     h, c, e = heritability_calculations(sim)
-    life = deprisk_life_15to65(sim)*10
+    life = deprisk_life_15to65(sim)
     prev = ratedep_12month(sim)
 
     perc_one, perc_two, perc_three = depressive_episode_analytics(sim)
     return results, h, c, e, life, prev, perc_one, perc_two, perc_three
+end
+
+function present_solution_abcde!(r)
+
+    best = []
+
+    prev_12 = Float64[]
+    prev_1565 = Float64[]
+    p_one = Float64[]
+    p_two = Float64[]
+    p_three = Float64[]
+    incr_par = Float64[]
+    incr_fr = Float64[]
+    incr_ac = Float64[]
+    incr_spouse = Float64[]
+    h_array = Float64[]
+    c_array = Float64[]
+    e_array = Float64[]
+    dist = Float64[]
+
+    o = Optimalparams()
+
+    for i=1:100
+        push!(best, sample(r.P , Weights(r.Wns)))
+    end
+    for paras in best
+        results, h, c, e, life, prev, perc_one, perc_two, perc_three = model(paras)
+        distance, dista = dist!(paras, o)
+        push!(prev_12, prev)
+        push!(prev_1565, life)
+        push!(p_one, perc_one)
+        push!(p_two, perc_two)
+        push!(p_three, perc_three)
+        push!(incr_par, results.rr_parents_30/10)
+        push!(incr_fr, results.incr4_fr)
+        push!(incr_ac, results.incr4_ac)
+        push!(incr_spouse, results.incr4_sp)
+        push!(h_array, h)
+        push!(c_array, c)
+        push!(e_array, e)
+        push!(dist, distance)
+    end
+
+    println(" ")
+    println("Mittelwerte der Kalibrierungsergebnisse: ")
+    println("prev (12 months): ", mean(prev_12), " Standardabweichung: ", std(prev_12))
+    println("risk of depression between 15 and 65: ", mean(prev_1565), " Standardabweichung: ",std(prev_1565))
+    println(" ")
+    println("risk for another episode, if person has at least one depressive episode: ", mean(p_one), " Standardabweichung: ",std(p_one))
+    println("risk for another episode, if person has at least two depressive episodes: ", mean(p_two), " Standardabweichung: ",std(p_two))
+    println("risk for another episode, if person has at least three depressive episodes: ", mean(p_three), " Standardabweichung: ",std(p_three))
+    println(" ")
+    println("risk ratio parents 30 years later: ", mean(incr_par)*10, " Standardabweichung: ",std(incr_par))
+    println("increased risk if friend is depressed 4 years later: ", mean(incr_fr) - 1, " Standardabweichung: ",std(incr_fr))
+    println("increased risk if ac is depressed 4 years later: ", mean(incr_ac)- 1, " Standardabweichung: ",std(incr_ac))
+    println("increased risk if spouse is depressed 4 years later: ", mean(incr_spouse)- 1, " Standardabweichung: ",std(incr_spouse))
+    println(" ")
+    println("Heritabilitätsschätzer")
+    println("h: ", mean(h_array), " Standardabweichung: ", std(h_array))
+    println("c: ", mean(c_array), " Standardabweichung: ", std(c_array))
+    println("e: ", mean(e_array), " Standardabweichung: ", std(e_array))
+    
+    
+    mindistance, index = findmin(dist)
+
+    while mindistance === NaN
+        mindistance, index = findmin(dist)
+    end
+    println("parameters with lowest distance: ", best[index])
+    println("minimal distance is: ", mindistance)
+
 end
 
 function optimization_current_para(steps, npoints=600)
