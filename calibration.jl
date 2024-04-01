@@ -387,7 +387,7 @@ function calibration_abcde!()
 
     priors = Product([Uniform(0,10), Uniform(0,10), Uniform(0,20), Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(-10,10), Uniform(0,1), Uniform(0,1), Uniform(0,1), Uniform(0,1), Uniform(0,10), Uniform(0,10), Uniform(0,1)]) 
 
-    r1 = abcdesmc!(priors, dist!, ϵ , data, nparticles=100, nsims_max = 250000, parallel = true)
+    r1 = abcdesmc!(priors, dist!, ϵ , data, nparticles=100, nsims_max = 100000, parallel = true)
 
     posterior_prev = [t[1] for t in r1.P[r1.Wns .> 0.0]]
     posterior_par = [t[2] for t in r1.P[r1.Wns .> 0.0]]
@@ -403,12 +403,15 @@ function calibration_abcde!()
     posterior_h = [t[12] for t in r1.P[r1.Wns .> 0.0]]
     posterior_lambda = [t[13] for t in r1.P[r1.Wns .> 0.0]]
     posterior_scaling = [t[14] for t in r1.P[r1.Wns .> 0.0]]
+    posterior_mw = [t[15] for t in r1.P[r1.Wns .> 0.0]]
 
 
     evidence = exp(r1.logZ)
     blobs = r1.blobs[r1.Wns .> 0.0]
 
     present_solution_abcde!(r1)
+    println(r1.P)
+
 
     Plots.histogram(posterior_prev, normed=true, bins = 10, labels = "posterior prev", xrange = (0,10))
     Plots.histogram(posterior_par, normed=true, bins = 10, labels = "posterior par", xrange = (0,10))
@@ -424,6 +427,7 @@ function calibration_abcde!()
     Plots.histogram(posterior_h, normed=true, bins = 10, labels = "posterior h", xrange = (0,1))
     Plots.histogram(posterior_lambda, normed=true, bins = 10, labels = "posterior lambda", xrange = (0,1))
     Plots.histogram(posterior_scaling, normed=true, bins = 10, labels = "posterior scaling", xrange = (0,10))
+    Plots.histogram(posterior_mw, normed=true, bins = 10, labels = "posterior mw", xrange = (0,1))
 
     
 end
@@ -515,9 +519,13 @@ function present_solution_abcde!(r)
     
     mindistance, index = findmin(dist)
 
-    while mindistance === NaN
-        mindistance, index = findmin(dist)
-    end
+    # while mindistance == 1000 || mindistance === NaN
+    #     mindistance, index = findmin(dist)
+
+    #     if mindistance === NaN
+    #         dist[index] = 1000
+    #     end
+    # end
     println("parameters with lowest distance: ", best[index])
     println("minimal distance is: ", mindistance)
 

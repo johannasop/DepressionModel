@@ -139,7 +139,7 @@ function update!(person, sim, para)
     end
     push!(person.environmental_risk, rate_plus_experience)
 
-    person.risk = ratetoprob(rate_plus_experience * person.pheno_susceptibility)
+    person.risk = ratetoprob(person.pheno_susceptibility * rate_plus_experience)
     
     if person.age >= 15 && rand() < person.risk
         person.state = depressed
