@@ -1,31 +1,31 @@
 Base.@kwdef mutable struct Parameters
 
-    prev::Float64 = 0.655886
+    prev::Float64 = 9.4749
     rem::Float64 = 0.53
     rem_ther::Float64 = 0.45
     avail_high::Float64 = 0.2
     avail_middle::Float64 = 0.1
     avail_low::Float64 = 0.0
-    rate_parents::Float64=  7.7504
-    rate_friends::Float64 = 2.1205
-    rate_ac::Float64 = 2.7277
-    rate_child::Float64 = 7.2238
-    rate_spouse::Float64 = 7.5871
-    n::Int64 = 2000
-    n_fam::Int64 = 560
+    rate_parents::Float64=  9.26244
+    rate_friends::Float64 = 2.1319
+    rate_ac::Float64 = 4.911
+    rate_child::Float64 = 6.519
+    rate_spouse::Float64 = 0.305
+    n::Int64 = 1000
+    n_fam::Int64 = 280
     p_ac::Float64 = 15
     p_fr::Float64 = 4
     seed::Int64 = 0
 
-    lambda::Float64 = 0.0224
-    scaling::Float64 = 2.3134
+    lambda::Float64 = 0.00654
+    scaling::Float64 = 3.245
     #Breite der Verteilung der susceptibility des Zufalls
-    w_mean::Float64 = 0.036559
-    b::Float64 = 2.8067
-    mw_h::Float64 = -5.13995
+    w_mean::Float64 = 0.0399
+    b::Float64 = 6.800
+    mw_h::Float64 = -4.461
 
     #Heritabilitätsindex(?)
-    h::Float64 = 0.14039
+    h::Float64 = 0.01191
     
     #Wahrscheinlichkeiten für unterschiedliche Anzahl von Kindern
     p_none::Float64 = 0.18
@@ -55,9 +55,9 @@ Base.@kwdef mutable struct Parameters
     prob_twins::Float64 = 0.0137
 
     #homophily
-    homophily_friends::Float64 = 0.00874
-    homophily_spouse::Float64 = 0.32855
-    homophily_ac::Float64 = 0.1567
+    homophily_friends::Float64 = 0.2751
+    homophily_spouse::Float64 = 0.6505
+    homophily_ac::Float64 = 0.9278
 
     #Welcher Feedbackeffekt aktiviert wird
     ther_restriction :: Bool = true

@@ -758,6 +758,8 @@ function printpara!(sim, results)
     println("** h: ", h)
     println("** c: ", c)
     println("** e: ", e)
+    println(" ")
+    println("Korrelation der Eigenvektorzentralität mit der Anzahl depressiver Episoden: ", eigen_centrality(sim))
     println("_______________________________________________________________________________")
 end
 
@@ -1257,4 +1259,48 @@ function depressive_episode_analytics(sim)
     else
         return 1.0, 1.0, 1.0
     end
+end
+
+function eigen_centrality(sim)
+    #every person is counted
+    D = Dict{SimplePerson, Int64}()
+    centralities = []
+    dep_episodes = Int64[]
+
+    for i in eachindex(sim.pop)
+        D[sim.pop[i]] = i 
+    end
+
+    G = Graph(length(sim.pop))
+
+    for person in sim.pop
+        for parent in person.parents
+            if parent.alive
+                add_edge!(G, D[person], D[parent])
+            end
+        end
+        for friend in person.friends
+            add_edge!(G, D[person], D[friend])
+        end
+        for ac in person.ac
+            add_edge!(G, D[person], D[ac])
+        end
+        for children in person.children
+            add_edge!(G, D[person], D[children])
+        end
+        for spouse in person.spouse
+            add_edge!(G, D[person], D[spouse])
+        end
+        for twin in person.twin
+            add_edge!(G, D[person], D[twin])
+        end
+    end
+
+    centralities = eigenvector_centrality(G)
+
+    for i in eachindex(sim.pop)
+        push!(dep_episodes, sim.pop[i].n_dep_episode)
+    end
+
+    return  cor(dep_episodes, centralities)
 end

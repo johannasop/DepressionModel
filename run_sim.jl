@@ -237,7 +237,7 @@ end
 
 #approximation_params_big!(60)
 
-#calibration_abcde!()
+calibration_abcde!()
 
 #hier kann sich ein Graph ausgegeben werden, bei dem geschaut wird, wie sich die Qualität der Simulation über den Bereich des Parameters entwickelt
 #mögliche Eingaben= "parent" "friends" "spouse" "child" "ac" "prev" "h"
@@ -247,7 +247,7 @@ end
 
 #test!()
 
-standard!(true, false, false)
+#standard!(true, false, false)
 #distri!()
 
 

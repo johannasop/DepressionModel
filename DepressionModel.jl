@@ -107,21 +107,22 @@ function update!(person, sim, para)
         return
     end
 
-    rate = 0
+    rate = para.prev
 
-    if (findfirst(p-> p.state == depressed, person.parents) != nothing)
-        rate += para.rate_parents
-    end
+    # if (findfirst(p-> p.state == depressed, person.parents) != nothing)
+    #     rate += para.rate_parents
+    # end
 
-    if (findfirst(p-> p.state == depressed, person.children) != nothing) 
-        rate += para.rate_child
-    end
+    # if (findfirst(p-> p.state == depressed, person.children) != nothing) 
+    #     rate += para.rate_child
+    # end
 
-    percentage = count(p -> p.state == depressed, person.friends)/length(person.friends)
-    rate += para.rate_friends * percentage
+    #jetzt Prozentsatz gesunder Personen, diese schützen dann
+    percentage = 1 - (count(p -> p.state == depressed, person.friends)/length(person.friends))
+    rate -= limit(0, (para.rate_friends * percentage), 100)
 
-    percentage = count(p -> p.state == depressed, person.ac)/length(person.ac)
-    rate += para.rate_ac * percentage
+    #percentage = count(p -> p.state == depressed, person.ac)/length(person.ac)
+    #rate += (para.rate_ac * percentage)
 
     if length(person.spouse) > 0 && person.spouse[1].state == depressed 
         rate += para.rate_spouse

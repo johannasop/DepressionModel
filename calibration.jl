@@ -387,7 +387,7 @@ function calibration_abcde!()
 
     priors = Product([Uniform(0,10), Uniform(0,10), Uniform(0,20), Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(-10,10), Uniform(0,1), Uniform(0,1), Uniform(0,1), Uniform(0,1), Uniform(0,10), Uniform(0,10), Uniform(0,1)]) 
 
-    r1 = abcdesmc!(priors, dist!, ϵ , data, nparticles=100, nsims_max = 100000, parallel = true)
+    r1 = abcdesmc!(priors, dist!, ϵ , data, nparticles=100, nsims_max = 500000, parallel = true)
 
     posterior_prev = [t[1] for t in r1.P[r1.Wns .> 0.0]]
     posterior_par = [t[2] for t in r1.P[r1.Wns .> 0.0]]
@@ -497,6 +497,23 @@ function present_solution_abcde!(r)
         push!(dist, distance)
     end
 
+    println("Standardabweichungen der Parameter: ")
+    println("prev: ", std(r.P[1]))
+    println("rate_parents: ", std(r.P[2]))
+    println("rate friends: ", std(r.P[3]))
+    println("rate ac: ", std(r.P[4]))
+    println("rate spouse: ", std(r.P[6]))
+    println("rate child: ", std(r.P[5]))
+    println("b: ", std(r.P[7]))
+    println("mw h: ", std(r.P[8]))
+    println("homophily friends: ", std(r.P[9]))
+    println("homophily spouse: ", std(r.P[10]))
+    println("homophily ac: ", std(r.P[11]))
+    println("h: ", std(r.P[12]))
+    println("lambda: ", std(r.P[13]))
+    println("scaling: ", std(r.P[14]))
+    println("w_mean: ", std(r.P[15]))
+
     println(" ")
     println("Mittelwerte der Kalibrierungsergebnisse: ")
     println("prev (12 months): ", mean(prev_12), " Standardabweichung: ", std(prev_12))
@@ -515,6 +532,8 @@ function present_solution_abcde!(r)
     println("h: ", mean(h_array), " Standardabweichung: ", std(h_array))
     println("c: ", mean(c_array), " Standardabweichung: ", std(c_array))
     println("e: ", mean(e_array), " Standardabweichung: ", std(e_array))
+    println(" ")
+    println("Korrelation der Eigenvektorzentralität mit der Anzahl depressiver Episoden: ", eigen_centrality(sim))
     
     
     mindistance, index = findmin(dist)
