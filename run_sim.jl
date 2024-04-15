@@ -165,7 +165,8 @@ function standard!(ther_restriction, fdbck_education, fdbck_income, seed = 0)
 
     episode_array, percentage_array = depressive_episodes(sim)
     
-    Plots.plot([percentage_array])
+    Plots.plot([results.n_depressed, results.n_healthy])
+    #Plots.plot([percentage_array])
 
     
     #Plots.plot([c1, c2, c3, c4], labels =["1" "2" "3" "4"])
@@ -225,7 +226,7 @@ function distri!()
     array = Float64[]
 
     for i=1:1000
-        push!(array, limit(0, rand(Exponential(0.29)), 100))
+        push!(array, ratetoprob((limit(0, rand(Normal(1,0.2)), 100))))
     end
     sort!(array)
     Plots.histogram(array, bins = 100)
@@ -237,7 +238,7 @@ end
 
 #approximation_params_big!(60)
 
-calibration_abcde!()
+#calibration_abcde!()
 
 #hier kann sich ein Graph ausgegeben werden, bei dem geschaut wird, wie sich die Qualität der Simulation über den Bereich des Parameters entwickelt
 #mögliche Eingaben= "parent" "friends" "spouse" "child" "ac" "prev" "h"
@@ -251,7 +252,7 @@ calibration_abcde!()
 #distri!()
 
 
-#histograms_random_effects!(10)
+histograms_random_effects!(10)
 
 #sensi!()
 

@@ -49,8 +49,14 @@ mutable struct SimplePerson
 
     prob_ther::Float64
 
+    gen_susceptibility_expo::Vector{Float64}
+    pheno_susceptibility_expo::Float64
+
     gen_susceptibility::Vector{Float64}
     pheno_susceptibility::Float64
+    gen_resilience::Vector{Float64}
+    pheno_resilience::Float64
+
     environmental_risk::Vector{Float64}
     risk::Float64
 
@@ -72,8 +78,8 @@ end
 
 
 # how we construct a person object
-SimplePerson() = SimplePerson(true,[], [], [], [], [], [], 0, healthy, 0, 0, 0, [], 0, [], 0, 0, 0, [], 0, 0, 0)   # default Person is susceptible and has no contacts
-SimplePerson(state) = SimplePerson(true,[], [], [], [], [], [], 0, state, 0, 0, 0, [], 0, [], 0, 0, 0, [], 0, 0, 0)  # default Person has no contacts
+SimplePerson() = SimplePerson(true,[], [], [], [], [], [], 0, healthy, 0, 0, 0, [], 0, [], 0, [], 0 , [], 0, 0, 0, [], 0, 0, 0)   # default Person is susceptible and has no contacts
+SimplePerson(state) = SimplePerson(true,[], [], [], [], [], [], 0, state, 0, 0, 0, [], 0, [], 0, [], 0, [], 0, 0, 0, [], 0, 0, 0)  # default Person has no contacts
 
 
 # this is a parametric type
@@ -109,39 +115,46 @@ function update!(person, sim, para)
 
     rate = para.prev
 
-    # if (findfirst(p-> p.state == depressed, person.parents) != nothing)
-    #     rate += para.rate_parents
-    # end
+    if (findfirst(p-> p.state == depressed, person.parents) != nothing)
+        rate += para.rate_parents
+    end
 
-    # if (findfirst(p-> p.state == depressed, person.children) != nothing) 
-    #     rate += para.rate_child
-    # end
+    if (findfirst(p-> p.state == depressed, person.children) != nothing) 
+        rate += para.rate_child
+    end
 
-    #jetzt Prozentsatz gesunder Personen, diese schützen dann
-    percentage = 1 - (count(p -> p.state == depressed, person.friends)/length(person.friends))
-    rate -= limit(0, (para.rate_friends * percentage), 100)
+    percentage = count(p -> p.state == depressed, person.friends)/length(person.friends)
+    rate += (para.rate_friends * percentage)
 
-    #percentage = count(p -> p.state == depressed, person.ac)/length(person.ac)
-    #rate += (para.rate_ac * percentage)
+    percentage = count(p -> p.state == depressed, person.ac)/length(person.ac)
+    rate += (para.rate_ac * percentage)
 
     if length(person.spouse) > 0 && person.spouse[1].state == depressed 
         rate += para.rate_spouse
+    elseif length(person.spouse) > 0 && person.spouse[1].state == healthy
+        rate -= limit(0, para.rate_spouse_healthy, rate)
     end
-    
-    
-    rate += para.prev
-    
 
-    
+    n_healthy = count(p -> p.state == healthy, person.friends)
+    rate -= limit(0, (para.rate_friends_healthy * n_healthy), rate)
+
+
+    final_risk = person.pheno_susceptibility_expo
+        
     if length(person.environmental_risk) > 0 
         rate_plus_experience = (para.w_mean * rate) + ((1-para.w_mean) * last(person.environmental_risk))
     else
         rate_plus_experience = rate
     end
+
+    if isnan(rate_plus_experience)
+        rate_plus_experience = 0
+    end
+
     push!(person.environmental_risk, rate_plus_experience)
 
-    person.risk = ratetoprob(person.pheno_susceptibility * rate_plus_experience)
-    
+    person.risk = ratetoprob(rate_plus_experience * final_risk)
+   
     if person.age >= 15 && rand() < person.risk
         person.state = depressed
         push!(sim.pop_currently_depressed, person)
@@ -299,8 +312,14 @@ function newkid!(sim, para)
     parent2 = parent.spouse[1]
 
     #SES und susceptibility: gleicher SES wie Eltern aber bisschen andere susceptibility
+    newkid.gen_susceptibility_expo = [rand(parent.gen_susceptibility_expo), rand(parent2.gen_susceptibility_expo)]
+    newkid.pheno_susceptibility_expo = limit(0, (para.h_expo * (sum(newkid.gen_susceptibility_expo)/2) + ((1-para.h_expo) * rand(Exponential(para.lambda)))), 100)
+
     newkid.gen_susceptibility = [rand(parent.gen_susceptibility), rand(parent2.gen_susceptibility)]
-    newkid.pheno_susceptibility =  limit(0, (para.h * (sum(newkid.gen_susceptibility)/2) + ((1-para.h) * rand(Exponential(para.lambda)))), 100) 
+    newkid.pheno_susceptibility =  limit(0, (para.h * (sum(newkid.gen_susceptibility)/2) + ((1-para.h) * rand(Normal(para.mw_h_resilience, para.b)))), 100) 
+
+    newkid.gen_resilience = [rand(parent.gen_resilience), rand(parent2.gen_resilience)]
+    newkid.pheno_resilience =  limit(0.001, (para.h_resilience * (sum(newkid.gen_resilience)/2) + ((1-para.h_resilience) * rand(Normal(para.mw_h_resilience, para.b_resilience)))), 100) 
 
     add_eachother!(newkid, newkid.parents, parent, parent.children)
     add_eachother!(newkid, newkid.parents, parent2, parent2.children)
@@ -324,14 +343,27 @@ function newkid!(sim, para)
         socialcircle_twin!(newkid, newtwin)
 
         if rand() < (1/3)
+            newtwin.gen_susceptibility_expo = newkid.gen_susceptibility_expo
             newtwin.gen_susceptibility = newkid.gen_susceptibility
-            newtwin.pheno_susceptibility = limit(0, (para.h * (sum(newtwin.gen_susceptibility)/2) + ((1-para.h) * rand(Exponential(para.lambda)))), 100) 
+            newtwin.gen_resilience = newkid.gen_resilience
+
+            newtwin.pheno_susceptibility = limit(0, (para.h * (sum(newtwin.gen_susceptibility)/2) + ((1-para.h) * rand(Normal(para.mw_h, para.b)))), 100) 
+            newtwin.pheno_resilience =  limit(0.001, (para.h_resilience * (sum(newtwin.gen_resilience)/2) + ((1-para.h_resilience) * rand(Normal(para.mw_h_resilience, para.b_resilience)))), 100) 
+            newtwin.pheno_susceptibility_expo = limit(0, (para.h_expo * (sum(newtwin.gen_susceptibility_expo)/2) + ((1-para.h_expo) * rand(Exponential(para.lambda)))), 100)
+        
             if sim.time > 0
                 push!(sim.pop_identical_twins, newtwin)
             end
         else
             newtwin.gen_susceptibility = [rand(parent.gen_susceptibility), rand(parent2.gen_susceptibility)]
-            newtwin.pheno_susceptibility = limit(0, (para.h * (sum(newtwin.gen_susceptibility)/2) + ((1-para.h) * rand(Exponential(para.lambda)))), 100) 
+            newtwin.pheno_susceptibility = limit(0, (para.h * (sum(newtwin.gen_susceptibility)/2) + ((1-para.h) * rand(Normal(para.mw_h, para.b)))), 100) 
+            
+            newtwin.gen_resilience = [rand(parent.gen_resilience), rand(parent2.gen_resilience)]
+            newtwin.pheno_resilience =  limit(0.001, (para.h_resilience * (sum(newtwin.gen_resilience)/2) + ((1-para.h_resilience) * rand(Normal(para.mw_h_resilience, para.b_resilience)))), 100) 
+        
+            newtwin.gen_susceptibility_expo = [rand(parent.gen_susceptibility_expo), rand(parent2.gen_susceptibility_expo)]
+            newtwin.pheno_susceptibility_expo = limit(0, (para.h_expo * (sum(newtwin.gen_susceptibility_expo)/2) + ((1-para.h_expo) * rand(Exponential(para.lambda)))), 100)
+        
             if sim.time > 0
                 push!(sim.pop_fraternal_twins, newtwin)
             end

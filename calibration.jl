@@ -383,27 +383,26 @@ function calibration_abcde!()
     data = Optimalparams()
     #priors = Product([Uniform(0,10) for i=1:10]), [Uniform(0,1) for i=1:4], [Uniform(-10, 10) for i = 1:2]
 
-    ϵ = 0.5
+    ϵ = 0.1
 
-    priors = Product([Uniform(0,10), Uniform(0,10), Uniform(0,20), Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(-10,10), Uniform(0,1), Uniform(0,1), Uniform(0,1), Uniform(0,1), Uniform(0,10), Uniform(0,10), Uniform(0,1)]) 
+    priors = Product([Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(0,1), Uniform(0,1), Uniform(0,1), Uniform(0,1), Uniform(0,10), Uniform(0,1), Uniform(0,1), Uniform(0,10), Uniform(0,1), Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(0,1)]) 
 
-    r1 = abcdesmc!(priors, dist!, ϵ , data, nparticles=100, nsims_max = 500000, parallel = true)
+    r1 = abcdesmc!(priors, dist!, ϵ , data, nparticles=130, nsims_max = 500000, parallel = true)
 
-    posterior_prev = [t[1] for t in r1.P[r1.Wns .> 0.0]]
-    posterior_par = [t[2] for t in r1.P[r1.Wns .> 0.0]]
-    posterior_fr = [t[3] for t in r1.P[r1.Wns .> 0.0]]
-    posterior_ac = [t[4] for t in r1.P[r1.Wns .> 0.0]]
-    posterior_ch = [t[5] for t in r1.P[r1.Wns .> 0.0]]
-    posterior_sp = [t[6] for t in r1.P[r1.Wns .> 0.0]]
-    posterior_b = [t[7] for t in r1.P[r1.Wns .> 0.0]]
-    posterior_mw_h = [t[8] for t in r1.P[r1.Wns .> 0.0]]
-    posterior_hom_fr = [t[9] for t in r1.P[r1.Wns .> 0.0]]
-    posterior_hom_sp = [t[10] for t in r1.P[r1.Wns .> 0.0]]
-    posterior_hom_ac = [t[11] for t in r1.P[r1.Wns .> 0.0]]
-    posterior_h = [t[12] for t in r1.P[r1.Wns .> 0.0]]
-    posterior_lambda = [t[13] for t in r1.P[r1.Wns .> 0.0]]
-    posterior_scaling = [t[14] for t in r1.P[r1.Wns .> 0.0]]
-    posterior_mw = [t[15] for t in r1.P[r1.Wns .> 0.0]]
+    # posterior_prev = [t[1] for t in r1.P[r1.Wns .> 0.0]]
+    # posterior_par = [t[2] for t in r1.P[r1.Wns .> 0.0]]
+    # posterior_fr = [t[3] for t in r1.P[r1.Wns .> 0.0]]
+    # posterior_fr_healthy = [t[4] for t in r1.P[r1.Wns .> 0.0]]
+    # posterior_ac = [t[5] for t in r1.P[r1.Wns .> 0.0]]
+    # posterior_ch = [t[6] for t in r1.P[r1.Wns .> 0.0]]
+    # posterior_sp = [t[7] for t in r1.P[r1.Wns .> 0.0]]
+    # posterior_hom_fr = [t[8] for t in r1.P[r1.Wns .> 0.0]]
+    # posterior_hom_sp = [t[9] for t in r1.P[r1.Wns .> 0.0]]
+    # posterior_hom_ac = [t[10] for t in r1.P[r1.Wns .> 0.0]]
+    # posterior_h = [t[11] for t in r1.P[r1.Wns .> 0.0]]
+    # posterior_lambda = [t[12] for t in r1.P[r1.Wns .> 0.0]]
+    # posterior_scaling = [t[13] for t in r1.P[r1.Wns .> 0.0]]
+    # posterior_mw = [t[14] for t in r1.P[r1.Wns .> 0.0]]
 
 
     evidence = exp(r1.logZ)
@@ -413,21 +412,20 @@ function calibration_abcde!()
     println(r1.P)
 
 
-    Plots.histogram(posterior_prev, normed=true, bins = 10, labels = "posterior prev", xrange = (0,10))
-    Plots.histogram(posterior_par, normed=true, bins = 10, labels = "posterior par", xrange = (0,10))
-    Plots.histogram(posterior_fr, normed=true, bins = 10, labels = "posterior fr", xrange = (0,10))
-    Plots.histogram(posterior_ac, normed=true, bins = 10, labels = "posterior ac", xrange = (0,10))
-    Plots.histogram(posterior_ch, normed=true, bins = 10, labels = "posterior ch", xrange = (0,10))
-    Plots.histogram(posterior_sp, normed=true, bins = 10, labels = "posterior spouse", xrange = (0,10))
-    Plots.histogram(posterior_b, normed=true, bins = 10, labels = "posterior b", xrange = (0,10))
-    Plots.histogram(posterior_mw_h, normed=true, bins = 10, labels = "posterior mw_h", xrange = (-10,10))
-    Plots.histogram(posterior_hom_fr, normed=true, bins = 10, labels = "posterior hom_fr", xrange = (0,1))
-    Plots.histogram(posterior_hom_sp, normed=true, bins = 10, labels = "posterior hom_sp", xrange = (0,1))
-    Plots.histogram(posterior_hom_ac, normed=true, bins = 10, labels = "posterior hom_ac", xrange = (0,1))
-    Plots.histogram(posterior_h, normed=true, bins = 10, labels = "posterior h", xrange = (0,1))
-    Plots.histogram(posterior_lambda, normed=true, bins = 10, labels = "posterior lambda", xrange = (0,1))
-    Plots.histogram(posterior_scaling, normed=true, bins = 10, labels = "posterior scaling", xrange = (0,10))
-    Plots.histogram(posterior_mw, normed=true, bins = 10, labels = "posterior mw", xrange = (0,1))
+    # Plots.histogram(posterior_prev, normed=true, bins = 10, labels = "posterior prev", xrange = (0,10))
+    # Plots.histogram(posterior_par, normed=true, bins = 10, labels = "posterior par", xrange = (0,10))
+    # Plots.histogram(posterior_fr, normed=true, bins = 10, labels = "posterior fr", xrange = (0,10))
+    # Plots.histogram(posterior_fr_healthy, normed=true, bins = 10, labels = "posterior fr healthy", xrange = (0,10))
+    # Plots.histogram(posterior_ac, normed=true, bins = 10, labels = "posterior ac", xrange = (0,10))
+    # Plots.histogram(posterior_ch, normed=true, bins = 10, labels = "posterior ch", xrange = (0,10))
+    # Plots.histogram(posterior_sp, normed=true, bins = 10, labels = "posterior spouse", xrange = (0,10))
+    # Plots.histogram(posterior_hom_fr, normed=true, bins = 10, labels = "posterior hom_fr", xrange = (0,1))
+    # Plots.histogram(posterior_hom_sp, normed=true, bins = 10, labels = "posterior hom_sp", xrange = (0,1))
+    # Plots.histogram(posterior_hom_ac, normed=true, bins = 10, labels = "posterior hom_ac", xrange = (0,1))
+    # Plots.histogram(posterior_h, normed=true, bins = 10, labels = "posterior h", xrange = (0,1))
+    # Plots.histogram(posterior_lambda, normed=true, bins = 10, labels = "posterior lambda", xrange = (0,1))
+    # Plots.histogram(posterior_scaling, normed=true, bins = 10, labels = "posterior scaling", xrange = (0,10))
+    # Plots.histogram(posterior_mw, normed=true, bins = 10, labels = "posterior mw", xrange = (0,1))
 
     
 end
@@ -443,7 +441,7 @@ end
 function model(r)
     d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids = pre_setup()
 
-    paras = Parameters(prev = r[1], rate_parents = r[2], rate_friends = r[3], rate_ac = r[4], rate_child = r[5], rate_spouse = r[6], b = r[7], mw_h = r[8], homophily_friends=r[9], homophily_spouse=r[10], homophily_ac=r[11],  h= r[12], lambda = r[13], scaling = r[14], w_mean = r[15])
+    paras = Parameters(prev = r[1], rate_parents = r[2], rate_friends = r[3], rate_friends_healthy = r[4], rate_ac = r[5], rate_child = r[6], rate_spouse = r[7], rate_spouse_healthy = r[8], homophily_friends=r[9], homophily_spouse=r[10], homophily_ac=r[11],  lambda = r[12], scaling = r[13], w_mean = r[14], h= r[15],  b = r[16], h_resilience = r[17], b_resilience = r[18], mw_h = r[19], mw_h_resilience = r[20], h_expo=r[21])
     
     sim = setup_sim(paras, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
 
@@ -497,23 +495,32 @@ function present_solution_abcde!(r)
         push!(dist, distance)
     end
 
+    filtered = [t for t in r.P[r.Wns .> 0.0]]
     println("Standardabweichungen der Parameter: ")
-    println("prev: ", std(r.P[1]))
-    println("rate_parents: ", std(r.P[2]))
-    println("rate friends: ", std(r.P[3]))
-    println("rate ac: ", std(r.P[4]))
-    println("rate spouse: ", std(r.P[6]))
-    println("rate child: ", std(r.P[5]))
-    println("b: ", std(r.P[7]))
-    println("mw h: ", std(r.P[8]))
-    println("homophily friends: ", std(r.P[9]))
-    println("homophily spouse: ", std(r.P[10]))
-    println("homophily ac: ", std(r.P[11]))
-    println("h: ", std(r.P[12]))
-    println("lambda: ", std(r.P[13]))
-    println("scaling: ", std(r.P[14]))
-    println("w_mean: ", std(r.P[15]))
+    println("prev: ", std([t[1] for t in r.P[r.Wns .> 0.0]]))
+    println("rate parents: ", std([t[2] for t in r.P[r.Wns .> 0.0]]))
+    println("rate friends: ", std([t[3] for t in r.P[r.Wns .> 0.0]]))
+    println("rate friends healthy: ", std([t[4] for t in r.P[r.Wns .> 0.0]]))
+    println("rate ac: ", std([t[5] for t in r.P[r.Wns .> 0.0]]))
+    println("rate child: ", std([t[6] for t in r.P[r.Wns .> 0.0]]))
+    println("rate spouse: ", std([t[7] for t in r.P[r.Wns .> 0.0]]))
+    println("rate spouse healthy: ", std([t[8] for t in r.P[r.Wns .> 0.0]]))
+    println("homophily friends: ", std([t[9] for t in r.P[r.Wns .> 0.0]]))
+    println("homophily spouse: ", std([t[10] for t in r.P[r.Wns .> 0.0]]))
+    println("homophily ac: ", std([t[11] for t in r.P[r.Wns .> 0.0]]))
+    println("lambda: ", std([t[12] for t in r.P[r.Wns .> 0.0]]))
+    println("scaling: ", std([t[13] for t in r.P[r.Wns .> 0.0]]))
+    println("w_mean: ", std([t[14] for t in r.P[r.Wns .> 0.0]]))
+    println("h: ", std([t[15] for t in r.P[r.Wns .> 0.0]]))
+    println("b: ", std([t[16] for t in r.P[r.Wns .> 0.0]]))
+    println("h resilience: ", std([t[17] for t in r.P[r.Wns .> 0.0]]))
+    println("b resilience: ", std([t[18] for t in r.P[r.Wns .> 0.0]]))
+    println("mw h: ", std([t[19] for t in r.P[r.Wns .> 0.0]]))
+    println("mw h resilience: ", std([t[20] for t in r.P[r.Wns .> 0.0]]))
+    println("h expo: ", std([t[21] for t in r.P[r.Wns .> 0.0]]))
 
+    
+  
     println(" ")
     println("Mittelwerte der Kalibrierungsergebnisse: ")
     println("prev (12 months): ", mean(prev_12), " Standardabweichung: ", std(prev_12))
@@ -533,7 +540,7 @@ function present_solution_abcde!(r)
     println("c: ", mean(c_array), " Standardabweichung: ", std(c_array))
     println("e: ", mean(e_array), " Standardabweichung: ", std(e_array))
     println(" ")
-    println("Korrelation der Eigenvektorzentralität mit der Anzahl depressiver Episoden: ", eigen_centrality(sim))
+    #println("Korrelation der Eigenvektorzentralität mit der Anzahl depressiver Episoden: ", eigen_centrality(sim))
     
     
     mindistance, index = findmin(dist)

@@ -312,7 +312,15 @@ function count_depr!(ctr, group)
 	end
 end
 
-depr_ratio(ctr) = ctr.depr / (ctr.pop + 0.00001)
+function depr_ratio(ctr) 
+    if ctr.pop == 0 
+        return  0.0001
+    elseif ctr.depr == 0 
+        return ctr.depr + 1 / (ctr.pop)
+    else 
+        return ctr.depr/ctr.pop
+    end
+end
 
 #Berechnung der Erhöhung des Risikos! So wie bei Rosenquist et al. (2011)
 #Diese Funktion wird aufgerufen an einem zufälligen Zeitschritt und dann wird vier Jahre später die nächste Funktion aufgerufen, um eine Erhöhung des Risikos zu berechnen
@@ -410,11 +418,11 @@ function increasedrisks(former_risk_children, former_risk_friends, former_risk_a
     current_risk_children = depr_ratio(i_ctr_par)
 
 
-    return (increased_risk_parents_4 = para.scaling * (current_risk_children/(former_risk_children + (1/length(sim.pop)))), 
-	    increased_risk_friends_4 = para.scaling * (current_risk_friends/(former_risk_friends+ (1/length(sim.pop)))), 
-	    increased_risk_ac_4 = para.scaling * (current_risk_ac/(former_risk_ac + (1/length(sim.pop)))), 
-	    increased_risk_children_4 = para.scaling * (current_risk_parents/(former_risk_parents+(1/length(sim.pop)))), 
-	    increased_risk_spouse_4 = para.scaling* (current_risk_spouse/(former_risk_spouse + (1/length(sim.pop)))))
+    return (increased_risk_parents_4 = para.scaling * (current_risk_children/(former_risk_children)), 
+	    increased_risk_friends_4 = para.scaling * (current_risk_friends/(former_risk_friends)), 
+	    increased_risk_ac_4 = para.scaling * (current_risk_ac/(former_risk_ac)), 
+	    increased_risk_children_4 = para.scaling * (current_risk_parents/(former_risk_parents)), 
+	    increased_risk_spouse_4 = para.scaling* (current_risk_spouse/(former_risk_spouse)))
 end
 
 
@@ -430,7 +438,7 @@ function rr_par_30(pop_t_0_depressed, pop_t_0_nondep, sim)
     for p in pop_t_0_nondep
         count_depr!(ctr_nondepkids, p.children)
     end
-    return depr_ratio(ctr_depkids) / (depr_ratio(ctr_nondepkids) + (1/length(sim.pop)))
+    return depr_ratio(ctr_depkids) / (depr_ratio(ctr_nondepkids))
     #(depkids/popkids)/(nondepkids/nondeppopkids)
 end
 
@@ -875,7 +883,7 @@ function rand_statistics(steps)
         
         q =  eval_params_multipleseeds(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids, 5)
         h,c,e = heritability_calculations(sim)
-        push!(df_all_params, [round(ratedep_12month(sim), digits = 2) round(deprisk_life_15to65(sim), digits = 2) round(deprisk_life(sim), digits = 2) round(results.rr_parents_30, digits = 2) round(results.increased_risk_friends_4, digits = 2) round(results.increased_risk_ac_4, digits = 2) round(results.increased_risk_spouse_4, digits = 2) round(h, digits = 2) round(q, digits = 5)])        
+        push!(df_all_params, [round(ratedep_12month(sim), digits = 2) round(deprisk_life_15to65(sim), digits = 2) round(deprisk_life(sim), digits = 2) round(results.rr_parents_30, digits = 2) round(results.incr4_fr, digits = 2) round(results.incr4_ac, digits = 2) round(results.incr4_sp, digits = 2) round(h, digits = 2) round(q, digits = 5)])        
 
         print("+")
     end
@@ -961,15 +969,10 @@ function heritability_calculations(sim)
         e_falc = 1 - cor_ident
     end
 
-    if h_falc === NaN || c_falc === NaN || e_falc === NaN
-        println(episodes_frattwin_a)
-        println(episodes_frattwin_b)
-        println(episodes_identtwin_a)
-        println(episodes_identtwin_b)
-
-        println(h_falc)
-        println(c_falc)
-        println(e_falc)
+    if  isnan(h_falc)|| isnan(c_falc)|| isnan(e_falc)
+        h_falc = 0
+        c_falc = 0
+        e_falc = 0
     end
     return h_falc, c_falc, e_falc
 end
