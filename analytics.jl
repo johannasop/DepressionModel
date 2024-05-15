@@ -2,8 +2,8 @@
 #Ratenberechnung zur Überprüfung
 function ratedep_12month(sim)
     counter = count(p->p.state==depressed, sim.pop)
-    
-    return counter/length(sim.pop)
+    count_pop = count(p->p.age>15, sim.pop)
+    return counter/count_pop
 end
 
 function deprisk_life_15to65(sim)
@@ -476,10 +476,14 @@ function feedback_analytics(sim)
          if person.state == depressed
              d_count += 1
              avg_d += person.income
-         elseif person.state == healthy
-             h_count +=1
-             avg_h += person.income
          end
+    end
+    while h_count < d_count
+        p = rand(sim.pop)
+        if p.state == healthy
+            h_count += 1
+            avg_h += p.income
+        end
     end
  
     return (avg_d/d_count), (avg_h/h_count)
@@ -720,6 +724,7 @@ end
 
 
 function printpara!(sim, results)
+   
     println("Zielparameter: ", Optimalparams())
 
     println( "** prev (12 months): ", ratedep_12month(sim) )
@@ -1189,6 +1194,11 @@ function pl(sim)
     acaverage = Float64[]
     parentaverage = Float64[]
 
+    fr_randomaverage = Float64[]
+    sp_randomaverage = Float64[]
+    ac_randomaverage = Float64[]
+    pa_randomaverage = Float64[]
+
     for p in sim.pop
         if p.age > 18
             f = 0
@@ -1196,41 +1206,66 @@ function pl(sim)
             s = 0
             pa = 0
 
+            f_r = 0
+            a_r = 0
+            s_r = 0
+            pa_r = 0
+
             for friend in p.friends
                 f += friend.n_dep_episode
             end
+            for i=1:length(p.friends)
+                f_r += rand(sim.pop).n_dep_episode
+            end
+
             for ac in p.ac
                 a += ac.n_dep_episode
             end
+            for i=1:length(p.ac)
+                a_r += rand(sim.pop).n_dep_episode
+            end
+
             for parent in p.parents
                 pa += parent.n_dep_episode
+            end
+            for i=1:length(p.parents)
+                pa_r += rand(sim.pop).n_dep_episode
             end
 
 
             if length(p.spouse) > 0
                 s = p.spouse[1].n_dep_episode
+                s_r = rand(sim.pop).n_dep_episode
                 push!(spouse, s)
                 push!(ego_s, p.n_dep_episode)
+
+                push!(sp_randomaverage, s_r)
             end
 
             if length(p.friends)>0
                 push!(friendaverage, f/length(p.friends))
                 push!(ego_f, p.n_dep_episode)
 
+                push!(fr_randomaverage, f_r/length(p.friends))
+
             end
             if length(p.ac)>0
                 push!(acaverage, a/length(p.ac))
                 push!(ego_a, p.n_dep_episode)
+
+                push!(ac_randomaverage, a_r/length(p.ac))
             end
             if length(p.parents)>0
                 push!(parentaverage, pa/length(p.parents))
                 push!(ego_p, p.n_dep_episode)
+
+                push!(pa_randomaverage, pa_r/length(p.parents))
             end
         end
         
     end
 
-    return ego_f, ego_a, ego_s, ego_p, friendaverage, acaverage, spouse, parentaverage
+    return ego_f, ego_a, ego_s, ego_p, friendaverage, acaverage, spouse, parentaverage, fr_randomaverage, ac_randomaverage, sp_randomaverage, pa_randomaverage
 end
 
 function depressive_episodes(sim)
@@ -1306,4 +1341,782 @@ function eigen_centrality(sim)
     end
 
     return  cor(dep_episodes, centralities)
+end
+
+
+#Ergebnisfunktionen Paper
+
+
+
+function mean_100!()
+
+    prev_year = Float64[]
+    lifetime = Float64[]
+    life_1565 = Float64[]
+    one_more = Float64[]
+    two_more = Float64[]
+    three_more = Float64[]
+    rr_par_30 = Float64[]
+    inc_fr = Float64[]
+    inc_ac = Float64[]
+    inc_sp = Float64[]
+    h_array = Float64[]
+    c_array = Float64[]
+    e_array = Float64[]
+    corr_array = Float64[]
+
+    ages_prev = []
+    ages_prev_mean = Float64[]
+
+    corr_age_nepisodes = Float64[]
+
+    fr_depressed = Float64[]
+    fr_non_depressed = Float64[]
+
+    m_e = 0
+    m_r = 0
+
+    m_e_nd = 0
+    m_r_nd = 0
+
+
+    for i=1:100
+        friends_depressed = 0
+        friends_non_depressed = 0
+    
+        d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids = pre_setup()
+
+        para = Parameters()
+
+        sim = setup_sim(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids) 
+
+        results = run_sim(sim, para)
+
+
+
+        push!(prev_year, ratedep_12month(sim))
+        push!(lifetime, deprisk_life(sim))
+        push!(life_1565, deprisk_life_15to65(sim))
+        perc_one, perc_two, perc_three = depressive_episode_analytics(sim)
+        push!(one_more, perc_one)
+        push!(two_more, perc_two)
+        push!(three_more, perc_three)
+        push!(rr_par_30, results.rr_parents_30)
+        push!(inc_fr, results.incr4_fr)
+        push!(inc_ac, results.incr4_ac)
+        push!(inc_sp, results.incr4_sp)
+
+        h, c, e = heritability_calculations(sim)
+        push!(h_array, h)
+        push!(c_array, c)
+        push!(e_array, e)
+
+        corr = eigen_centrality(sim)
+        push!(corr_array, corr)
+
+        push!(ages_prev, ages_prevalences(sim))
+
+        push!(corr_age_nepisodes, corr_age_episodes(sim))
+    
+
+
+        for person in sim.pop_depressed
+            friends_depressed += length(person.friends) 
+        end
+        for person in sim.pop_non_depressed
+            friends_non_depressed += length(person.friends)
+        end
+        push!(fr_depressed, friends_depressed/length(sim.pop_depressed))
+        push!(fr_non_depressed, friends_non_depressed/length(sim.pop_non_depressed))
+
+    end
+
+
+    println("Zielparameter: ", Optimalparams())
+
+    println( "** prev (12 months): ", mean(prev_year), " sd: ", std(prev_year))
+    println( " lifetime risk of depression: ", mean(lifetime), " sd: ", std(lifetime))
+    println( "** risk of depression between 15 and 65: ", mean(life_1565), " sd: ", std(life_1565))
+    println( " ")
+    println( "** risk for another episode, if person has at least one depressive episode: ", mean(one_more), " sd: ", std(one_more))
+    println( "** risk for another episode, if person has at least two depressive episodes: ", mean(two_more), " sd: ", std(two_more))
+    println( "** risk for another episode, if person has at least three depressive episodes: ", mean(three_more), " sd: ", std(three_more))
+    println(" ")
+    println("** risk ratio parents 30 years later: ", mean(rr_par_30), " sd: ", std(rr_par_30))
+    println(" ")
+    println("** increased risk if friend is depressed 4 years later: ", mean(inc_fr) - 1, " sd: ", std(inc_fr))
+    println("** increased risk if ac is depressed 4 years later: ", mean(inc_ac) - 1, " sd: ", std(inc_ac))
+    println("** increased risk if spouse is depressed 4 years later: ", mean(inc_sp) - 1, " sd: ", std(inc_sp))
+    println(" ")
+    println("Heritabilitätsschätzer: ")
+    println("** h: ", mean(h_array), " sd: ", std(h_array))
+    println("** c: ", mean(c_array), " sd: ", std(c_array))
+    println("** e: ", mean(e_array), " sd: ", std(e_array))
+    println(" ")
+    println("Korrelation der Eigenvektorzentralität mit der Anzahl depressiver Episoden: ", mean(corr_array), " sd: ", std(corr_array))
+    println(" ")
+    println("average number of friends: depressed people: ", mean(fr_depressed), " sd: ", std(fr_depressed))
+    println("average number of friends: nondepressed people: ", mean(fr_non_depressed), " sd: ", std(fr_non_depressed))
+    println("_______________________________________________________________________________")
+
+
+  
+    #das noch mitteln
+    d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids = pre_setup()
+    para = Parameters()
+    sim = setup_sim(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids) 
+    results = run_sim(sim, para)
+
+  
+    for person in sim.pop_depressed
+        m_e += mean(person.environmental_risk)
+        m_r += (person.pheno_susceptibility/person.pheno_resilience)
+    end
+    for person in sim.pop_non_depressed
+        m_e_nd += mean(person.environmental_risk)
+        m_r_nd += (person.pheno_susceptibility/person.pheno_resilience)
+    end
+
+    println(m_e/length(sim.pop_depressed), " ", m_r/length(sim.pop_depressed))
+    println(m_e_nd/length(sim.pop_non_depressed), " ", m_r_nd/length(sim.pop_non_depressed))
+
+    #Alter und Prävalenz 
+    ages_prev_mean = mean(ages_prev, dims= 1)
+    Plots.plot([ages_prev_mean], xlabel="age", ylabel="prevalence", legend = false)
+
+
+end
+
+function ages_prevalences(sim)
+
+    counter_people = 0
+    counter_depressed_people = 0
+    ages_prev = Float64[]
+
+    for i=15:80
+        counter_people = count(p->p.age == i , sim.pop)
+        counter_depressed_people = count(p->p.age == i&& p.state == depressed, sim.pop)
+        push!(ages_prev, counter_depressed_people/counter_people)
+    end
+
+    return ages_prev
+end
+
+function corr_age_episodes(sim)
+
+    c_episodes = Float64[]
+    ages = Int64[]
+
+    for i=15:80
+        n_ep = 0
+        person_counter = 0
+        push!(ages, i)
+
+        for person in sim.pop
+            if person.age == i
+                n_ep += person.n_dep_episode
+                person_counter +=1
+            end
+        end
+
+        push!(c_episodes, n_ep/person_counter)
+    end
+    return cor(ages, c_episodes)
+end
+
+
+
+
+function sensi_relevant_parameters!()
+
+    #homophily friends
+    prev_year = Float64[]
+    lifetime = Float64[]
+    life_1565 = Float64[]
+    one_more = Float64[]
+    two_more = Float64[]
+    three_more = Float64[]
+    rr_par_30 = Float64[]
+    inc_fr = Float64[]
+    inc_ac = Float64[]
+    inc_sp = Float64[]
+    h_array = Float64[]
+    c_array = Float64[]
+    e_array = Float64[]
+    corr_array = Float64[]
+
+
+    para = Parameters()
+    para_plus_half = Parameters(rate_friends_healthy = para.rate_friends_healthy+ (0.5* para.rate_friends_healthy))
+    para_minus_half = Parameters(rate_friends_healthy = para.rate_friends_healthy - (0.5* para.rate_friends_healthy))
+    para_plus = Parameters(rate_friends_healthy = para.rate_friends_healthy + (para.rate_friends_healthy))
+    para_minus = Parameters(rate_friends_healthy = para.rate_friends_healthy - (para.rate_friends_healthy))
+
+
+
+    mean_normal, sd_normal = return_mean_100(para)
+    mean_plus_half, sd_plus_half = return_mean_100(para_plus_half)
+    mean_minus_half, sd_minus_half = return_mean_100(para_minus_half)
+    mean_plus, sd_plus = return_mean_100(para_plus)
+    mean_minus, sd_minus = return_mean_100(para_minus)
+   
+    label_ticks = ["x0", "x0.5", "x1", "x1.5", "x2"]
+
+    push!(prev_year, mean_minus[1], mean_minus_half[1], mean_normal[1], mean_plus_half[1], mean_plus[1])
+    push!(lifetime, mean_minus[2], mean_minus_half[2], mean_normal[2], mean_plus_half[2], mean_plus[2])
+    push!(life_1565, mean_minus[3], mean_minus_half[3], mean_normal[3], mean_plus_half[3], mean_plus[3])
+    push!(one_more, mean_minus[4], mean_minus_half[4], mean_normal[4], mean_plus_half[4], mean_plus[4])
+    push!(two_more, mean_minus[5], mean_minus_half[5], mean_normal[5], mean_plus_half[5], mean_plus[5])
+    push!(three_more, mean_minus[6], mean_minus_half[6], mean_normal[6], mean_plus_half[6], mean_plus[6])
+    push!(rr_par_30, mean_minus[7], mean_minus_half[7], mean_normal[7], mean_plus_half[7], mean_plus[7])
+    push!(inc_fr, mean_minus[8], mean_minus_half[8], mean_normal[8], mean_plus_half[8], mean_plus[8])
+    push!(inc_ac, mean_minus[9], mean_minus_half[9], mean_normal[9], mean_plus_half[9], mean_plus[9])
+    push!(inc_sp, mean_minus[10], mean_minus_half[10], mean_normal[10], mean_plus_half[10], mean_plus[10])
+    push!(h_array, mean_minus[11], mean_minus_half[11], mean_normal[11], mean_plus_half[11], mean_plus[11])
+    push!(c_array, mean_minus[12], mean_minus_half[12], mean_normal[12], mean_plus_half[12], mean_plus[12])
+    push!(e_array, mean_minus[13], mean_minus_half[13], mean_normal[13], mean_plus_half[13], mean_plus[13])
+    push!(corr_array, mean_minus[14], mean_minus_half[14], mean_normal[14], mean_plus_half[14], mean_plus[14])
+
+    Plots.plot([prev_year, lifetime, one_more, two_more, three_more], xticks = (1:5, label_ticks), label = ["prevalence" "lifetime prevalence" "prob. more ep. after one" "prob. more ep. after two" "prob. more ep. after three"], lw=2, size=(400,300), legend =false, xlabel = "parameter change", ylabel="outcome")
+
+    #rate parents
+    # prev_year = Float64[]
+    # lifetime = Float64[]
+    # life_1565 = Float64[]
+    # one_more = Float64[]
+    # two_more = Float64[]
+    # three_more = Float64[]
+    # rr_par_30 = Float64[]
+    # inc_fr = Float64[]
+    # inc_ac = Float64[]
+    # inc_sp = Float64[]
+    # h_array = Float64[]
+    # c_array = Float64[]
+    # e_array = Float64[]
+    # corr_array = Float64[]
+
+
+    # para = Parameters()
+    # para_plus_half = Parameters(rate_parents = para.rate_parents+ (0.5* para.rate_parents))
+    # para_minus_half = Parameters(rate_parents = para.rate_parents - (0.5* para.rate_parents))
+    # para_plus = Parameters(rate_parents = para.rate_parents + (para.rate_parents))
+    # para_minus = Parameters(rate_parents = para.rate_parents - (para.rate_parents))
+
+
+
+    # mean_normal, sd_normal = return_mean_100(para)
+    # mean_plus_half, sd_plus_half = return_mean_100(para_plus_half)
+    # mean_minus_half, sd_minus_half = return_mean_100(para_minus_half)
+    # mean_plus, sd_plus = return_mean_100(para_plus)
+    # mean_minus, sd_minus = return_mean_100(para_minus)
+   
+    # label_ticks = ["x0", "x0.5", "x1", "x1.5", "x2"]
+
+    # push!(prev_year, mean_minus[1], mean_minus_half[1], mean_normal[1], mean_plus_half[1], mean_plus[1])
+    # push!(lifetime, mean_minus[2], mean_minus_half[2], mean_normal[2], mean_plus_half[2], mean_plus[2])
+    # push!(life_1565, mean_minus[3], mean_minus_half[3], mean_normal[3], mean_plus_half[3], mean_plus[3])
+    # push!(one_more, mean_minus[4], mean_minus_half[4], mean_normal[4], mean_plus_half[4], mean_plus[4])
+    # push!(two_more, mean_minus[5], mean_minus_half[5], mean_normal[5], mean_plus_half[5], mean_plus[5])
+    # push!(three_more, mean_minus[6], mean_minus_half[6], mean_normal[6], mean_plus_half[6], mean_plus[6])
+    # push!(rr_par_30, mean_minus[7], mean_minus_half[7], mean_normal[7], mean_plus_half[7], mean_plus[7])
+    # push!(inc_fr, mean_minus[8], mean_minus_half[8], mean_normal[8], mean_plus_half[8], mean_plus[8])
+    # push!(inc_ac, mean_minus[9], mean_minus_half[9], mean_normal[9], mean_plus_half[9], mean_plus[9])
+    # push!(inc_sp, mean_minus[10], mean_minus_half[10], mean_normal[10], mean_plus_half[10], mean_plus[10])
+    # push!(h_array, mean_minus[11], mean_minus_half[11], mean_normal[11], mean_plus_half[11], mean_plus[11])
+    # push!(c_array, mean_minus[12], mean_minus_half[12], mean_normal[12], mean_plus_half[12], mean_plus[12])
+    # push!(e_array, mean_minus[13], mean_minus_half[13], mean_normal[13], mean_plus_half[13], mean_plus[13])
+    # push!(corr_array, mean_minus[14], mean_minus_half[14], mean_normal[14], mean_plus_half[14], mean_plus[14])
+
+    # p2 = Plots.plot([prev_year, lifetime, one_more, two_more, three_more], xticks = (1:5, label_ticks), label = ["prevalence" "lifetime prevalence" "more after one" "more after two" "more after three"], title ="rate parents", legend =:outertopright)
+
+    # #rate friends
+    # prev_year = Float64[]
+    # lifetime = Float64[]
+    # life_1565 = Float64[]
+    # one_more = Float64[]
+    # two_more = Float64[]
+    # three_more = Float64[]
+    # rr_par_30 = Float64[]
+    # inc_fr = Float64[]
+    # inc_ac = Float64[]
+    # inc_sp = Float64[]
+    # h_array = Float64[]
+    # c_array = Float64[]
+    # e_array = Float64[]
+    # corr_array = Float64[]
+
+
+    # para = Parameters()
+    # para_plus_half = Parameters(rate_friends = para.rate_friends+ (0.5* para.rate_friends))
+    # para_minus_half = Parameters(rate_friends = para.rate_friends - (0.5* para.rate_friends))
+    # para_plus = Parameters(rate_friends = para.rate_friends + (para.rate_friends))
+    # para_minus = Parameters(rate_friends = para.rate_friends - (para.rate_friends))
+
+
+
+    # mean_normal, sd_normal = return_mean_100(para)
+    # mean_plus_half, sd_plus_half = return_mean_100(para_plus_half)
+    # mean_minus_half, sd_minus_half = return_mean_100(para_minus_half)
+    # mean_plus, sd_plus = return_mean_100(para_plus)
+    # mean_minus, sd_minus = return_mean_100(para_minus)
+   
+    # label_ticks = ["x0", "x0.5", "x1", "x1.5", "x2"]
+
+    # push!(prev_year, mean_minus[1], mean_minus_half[1], mean_normal[1], mean_plus_half[1], mean_plus[1])
+    # push!(lifetime, mean_minus[2], mean_minus_half[2], mean_normal[2], mean_plus_half[2], mean_plus[2])
+    # push!(life_1565, mean_minus[3], mean_minus_half[3], mean_normal[3], mean_plus_half[3], mean_plus[3])
+    # push!(one_more, mean_minus[4], mean_minus_half[4], mean_normal[4], mean_plus_half[4], mean_plus[4])
+    # push!(two_more, mean_minus[5], mean_minus_half[5], mean_normal[5], mean_plus_half[5], mean_plus[5])
+    # push!(three_more, mean_minus[6], mean_minus_half[6], mean_normal[6], mean_plus_half[6], mean_plus[6])
+    # push!(rr_par_30, mean_minus[7], mean_minus_half[7], mean_normal[7], mean_plus_half[7], mean_plus[7])
+    # push!(inc_fr, mean_minus[8], mean_minus_half[8], mean_normal[8], mean_plus_half[8], mean_plus[8])
+    # push!(inc_ac, mean_minus[9], mean_minus_half[9], mean_normal[9], mean_plus_half[9], mean_plus[9])
+    # push!(inc_sp, mean_minus[10], mean_minus_half[10], mean_normal[10], mean_plus_half[10], mean_plus[10])
+    # push!(h_array, mean_minus[11], mean_minus_half[11], mean_normal[11], mean_plus_half[11], mean_plus[11])
+    # push!(c_array, mean_minus[12], mean_minus_half[12], mean_normal[12], mean_plus_half[12], mean_plus[12])
+    # push!(e_array, mean_minus[13], mean_minus_half[13], mean_normal[13], mean_plus_half[13], mean_plus[13])
+    # push!(corr_array, mean_minus[14], mean_minus_half[14], mean_normal[14], mean_plus_half[14], mean_plus[14])
+
+    # p3 = Plots.plot([prev_year, lifetime, one_more, two_more, three_more], xticks = (1:5, label_ticks), label = ["prevalence" "lifetime prevalence" "more after one" "more after two" "more after three"], title ="rate friends", legend = false)
+
+    # #rate spouse
+    # prev_year = Float64[]
+    # lifetime = Float64[]
+    # life_1565 = Float64[]
+    # one_more = Float64[]
+    # two_more = Float64[]
+    # three_more = Float64[]
+    # rr_par_30 = Float64[]
+    # inc_fr = Float64[]
+    # inc_ac = Float64[]
+    # inc_sp = Float64[]
+    # h_array = Float64[]
+    # c_array = Float64[]
+    # e_array = Float64[]
+    # corr_array = Float64[]
+
+
+    # para = Parameters()
+    # para_plus_half = Parameters(rate_spouse = para.rate_spouse+ (0.5* para.rate_spouse))
+    # para_minus_half = Parameters(rate_spouse = para.rate_spouse - (0.5* para.rate_spouse))
+    # para_plus = Parameters(rate_spouse = para.rate_spouse + (para.rate_spouse))
+    # para_minus = Parameters(rate_spouse = para.rate_spouse - (para.rate_spouse))
+
+
+
+    # mean_normal, sd_normal = return_mean_100(para)
+    # mean_plus_half, sd_plus_half = return_mean_100(para_plus_half)
+    # mean_minus_half, sd_minus_half = return_mean_100(para_minus_half)
+    # mean_plus, sd_plus = return_mean_100(para_plus)
+    # mean_minus, sd_minus = return_mean_100(para_minus)
+   
+    # label_ticks = ["x0", "x0.5", "x1", "x1.5", "x2"]
+
+    # push!(prev_year, mean_minus[1], mean_minus_half[1], mean_normal[1], mean_plus_half[1], mean_plus[1])
+    # push!(lifetime, mean_minus[2], mean_minus_half[2], mean_normal[2], mean_plus_half[2], mean_plus[2])
+    # push!(life_1565, mean_minus[3], mean_minus_half[3], mean_normal[3], mean_plus_half[3], mean_plus[3])
+    # push!(one_more, mean_minus[4], mean_minus_half[4], mean_normal[4], mean_plus_half[4], mean_plus[4])
+    # push!(two_more, mean_minus[5], mean_minus_half[5], mean_normal[5], mean_plus_half[5], mean_plus[5])
+    # push!(three_more, mean_minus[6], mean_minus_half[6], mean_normal[6], mean_plus_half[6], mean_plus[6])
+    # push!(rr_par_30, mean_minus[7], mean_minus_half[7], mean_normal[7], mean_plus_half[7], mean_plus[7])
+    # push!(inc_fr, mean_minus[8], mean_minus_half[8], mean_normal[8], mean_plus_half[8], mean_plus[8])
+    # push!(inc_ac, mean_minus[9], mean_minus_half[9], mean_normal[9], mean_plus_half[9], mean_plus[9])
+    # push!(inc_sp, mean_minus[10], mean_minus_half[10], mean_normal[10], mean_plus_half[10], mean_plus[10])
+    # push!(h_array, mean_minus[11], mean_minus_half[11], mean_normal[11], mean_plus_half[11], mean_plus[11])
+    # push!(c_array, mean_minus[12], mean_minus_half[12], mean_normal[12], mean_plus_half[12], mean_plus[12])
+    # push!(e_array, mean_minus[13], mean_minus_half[13], mean_normal[13], mean_plus_half[13], mean_plus[13])
+    # push!(corr_array, mean_minus[14], mean_minus_half[14], mean_normal[14], mean_plus_half[14], mean_plus[14])
+
+    # p4 = Plots.plot([prev_year, lifetime, one_more, two_more, three_more], xticks = (1:5, label_ticks), label = ["prevalence" "lifetime prevalence" "more after one" "more after two" "more after three"], title ="rate spouse", legend = false)
+
+    # #rate ac
+    # prev_year = Float64[]
+    # lifetime = Float64[]
+    # life_1565 = Float64[]
+    # one_more = Float64[]
+    # two_more = Float64[]
+    # three_more = Float64[]
+    # rr_par_30 = Float64[]
+    # inc_fr = Float64[]
+    # inc_ac = Float64[]
+    # inc_sp = Float64[]
+    # h_array = Float64[]
+    # c_array = Float64[]
+    # e_array = Float64[]
+    # corr_array = Float64[]
+
+
+    # para = Parameters()
+    # para_plus_half = Parameters(rate_ac = para.rate_ac+ (0.5* para.rate_ac))
+    # para_minus_half = Parameters(rate_ac = para.rate_ac - (0.5* para.rate_ac))
+    # para_plus = Parameters(rate_ac = para.rate_ac + (para.rate_ac))
+    # para_minus = Parameters(rate_ac = para.rate_ac - (para.rate_ac))
+
+
+
+    # mean_normal, sd_normal = return_mean_100(para)
+    # mean_plus_half, sd_plus_half = return_mean_100(para_plus_half)
+    # mean_minus_half, sd_minus_half = return_mean_100(para_minus_half)
+    # mean_plus, sd_plus = return_mean_100(para_plus)
+    # mean_minus, sd_minus = return_mean_100(para_minus)
+   
+    # label_ticks = ["x0", "x0.5", "x1", "x1.5", "x2"]
+
+    # push!(prev_year, mean_minus[1], mean_minus_half[1], mean_normal[1], mean_plus_half[1], mean_plus[1])
+    # push!(lifetime, mean_minus[2], mean_minus_half[2], mean_normal[2], mean_plus_half[2], mean_plus[2])
+    # push!(life_1565, mean_minus[3], mean_minus_half[3], mean_normal[3], mean_plus_half[3], mean_plus[3])
+    # push!(one_more, mean_minus[4], mean_minus_half[4], mean_normal[4], mean_plus_half[4], mean_plus[4])
+    # push!(two_more, mean_minus[5], mean_minus_half[5], mean_normal[5], mean_plus_half[5], mean_plus[5])
+    # push!(three_more, mean_minus[6], mean_minus_half[6], mean_normal[6], mean_plus_half[6], mean_plus[6])
+    # push!(rr_par_30, mean_minus[7], mean_minus_half[7], mean_normal[7], mean_plus_half[7], mean_plus[7])
+    # push!(inc_fr, mean_minus[8], mean_minus_half[8], mean_normal[8], mean_plus_half[8], mean_plus[8])
+    # push!(inc_ac, mean_minus[9], mean_minus_half[9], mean_normal[9], mean_plus_half[9], mean_plus[9])
+    # push!(inc_sp, mean_minus[10], mean_minus_half[10], mean_normal[10], mean_plus_half[10], mean_plus[10])
+    # push!(h_array, mean_minus[11], mean_minus_half[11], mean_normal[11], mean_plus_half[11], mean_plus[11])
+    # push!(c_array, mean_minus[12], mean_minus_half[12], mean_normal[12], mean_plus_half[12], mean_plus[12])
+    # push!(e_array, mean_minus[13], mean_minus_half[13], mean_normal[13], mean_plus_half[13], mean_plus[13])
+    # push!(corr_array, mean_minus[14], mean_minus_half[14], mean_normal[14], mean_plus_half[14], mean_plus[14])
+
+    # p5 = Plots.plot([prev_year, lifetime, one_more, two_more, three_more], xticks = (1:5, label_ticks), label = ["prevalence" "lifetime prevalence" "more after one" "more after two" "more after three"], title ="rate ac", legend = false)
+
+    # #rate spouse healthy
+    # prev_year = Float64[]
+    # lifetime = Float64[]
+    # life_1565 = Float64[]
+    # one_more = Float64[]
+    # two_more = Float64[]
+    # three_more = Float64[]
+    # rr_par_30 = Float64[]
+    # inc_fr = Float64[]
+    # inc_ac = Float64[]
+    # inc_sp = Float64[]
+    # h_array = Float64[]
+    # c_array = Float64[]
+    # e_array = Float64[]
+    # corr_array = Float64[]
+
+
+    # para = Parameters()
+    # para_plus_half = Parameters(rate_spouse_healthy = para.rate_spouse_healthy+ (0.5* para.rate_spouse_healthy))
+    # para_minus_half = Parameters(rate_spouse_healthy = para.rate_spouse_healthy - (0.5* para.rate_spouse_healthy))
+    # para_plus = Parameters(rate_spouse_healthy = para.rate_spouse_healthy + (para.rate_spouse_healthy))
+    # para_minus = Parameters(rate_spouse_healthy = para.rate_spouse_healthy - (para.rate_spouse_healthy))
+
+
+
+    # mean_normal, sd_normal = return_mean_100(para)
+    # mean_plus_half, sd_plus_half = return_mean_100(para_plus_half)
+    # mean_minus_half, sd_minus_half = return_mean_100(para_minus_half)
+    # mean_plus, sd_plus = return_mean_100(para_plus)
+    # mean_minus, sd_minus = return_mean_100(para_minus)
+   
+    # label_ticks = ["x0", "x0.5", "x1", "x1.5", "x2"]
+
+    # push!(prev_year, mean_minus[1], mean_minus_half[1], mean_normal[1], mean_plus_half[1], mean_plus[1])
+    # push!(lifetime, mean_minus[2], mean_minus_half[2], mean_normal[2], mean_plus_half[2], mean_plus[2])
+    # push!(life_1565, mean_minus[3], mean_minus_half[3], mean_normal[3], mean_plus_half[3], mean_plus[3])
+    # push!(one_more, mean_minus[4], mean_minus_half[4], mean_normal[4], mean_plus_half[4], mean_plus[4])
+    # push!(two_more, mean_minus[5], mean_minus_half[5], mean_normal[5], mean_plus_half[5], mean_plus[5])
+    # push!(three_more, mean_minus[6], mean_minus_half[6], mean_normal[6], mean_plus_half[6], mean_plus[6])
+    # push!(rr_par_30, mean_minus[7], mean_minus_half[7], mean_normal[7], mean_plus_half[7], mean_plus[7])
+    # push!(inc_fr, mean_minus[8], mean_minus_half[8], mean_normal[8], mean_plus_half[8], mean_plus[8])
+    # push!(inc_ac, mean_minus[9], mean_minus_half[9], mean_normal[9], mean_plus_half[9], mean_plus[9])
+    # push!(inc_sp, mean_minus[10], mean_minus_half[10], mean_normal[10], mean_plus_half[10], mean_plus[10])
+    # push!(h_array, mean_minus[11], mean_minus_half[11], mean_normal[11], mean_plus_half[11], mean_plus[11])
+    # push!(c_array, mean_minus[12], mean_minus_half[12], mean_normal[12], mean_plus_half[12], mean_plus[12])
+    # push!(e_array, mean_minus[13], mean_minus_half[13], mean_normal[13], mean_plus_half[13], mean_plus[13])
+    # push!(corr_array, mean_minus[14], mean_minus_half[14], mean_normal[14], mean_plus_half[14], mean_plus[14])
+
+    # p6 = Plots.plot([prev_year, lifetime, one_more, two_more, three_more], xticks = (1:5, label_ticks), label = ["prevalence" "lifetime prevalence" "more after one" "more after two" "more after three"], title ="rate spouse healthy", legend = false)
+
+    # #rate friends healthy
+    # prev_year = Float64[]
+    # lifetime = Float64[]
+    # life_1565 = Float64[]
+    # one_more = Float64[]
+    # two_more = Float64[]
+    # three_more = Float64[]
+    # rr_par_30 = Float64[]
+    # inc_fr = Float64[]
+    # inc_ac = Float64[]
+    # inc_sp = Float64[]
+    # h_array = Float64[]
+    # c_array = Float64[]
+    # e_array = Float64[]
+    # corr_array = Float64[]
+
+
+    # para = Parameters()
+    # para_plus_half = Parameters(rate_friends_healthy = para.rate_friends_healthy+ (0.5* para.rate_friends_healthy))
+    # para_minus_half = Parameters(rate_friends_healthy = para.rate_friends_healthy - (0.5* para.rate_friends_healthy))
+    # para_plus = Parameters(rate_friends_healthy = para.rate_friends_healthy + (para.rate_friends_healthy))
+    # para_minus = Parameters(rate_friends_healthy = para.rate_friends_healthy - (para.rate_friends_healthy))
+
+
+
+    # mean_normal, sd_normal = return_mean_100(para)
+    # mean_plus_half, sd_plus_half = return_mean_100(para_plus_half)
+    # mean_minus_half, sd_minus_half = return_mean_100(para_minus_half)
+    # mean_plus, sd_plus = return_mean_100(para_plus)
+    # mean_minus, sd_minus = return_mean_100(para_minus)
+   
+    # label_ticks = ["x0", "x0.5", "x1", "x1.5", "x2"]
+
+    # push!(prev_year, mean_minus[1], mean_minus_half[1], mean_normal[1], mean_plus_half[1], mean_plus[1])
+    # push!(lifetime, mean_minus[2], mean_minus_half[2], mean_normal[2], mean_plus_half[2], mean_plus[2])
+    # push!(life_1565, mean_minus[3], mean_minus_half[3], mean_normal[3], mean_plus_half[3], mean_plus[3])
+    # push!(one_more, mean_minus[4], mean_minus_half[4], mean_normal[4], mean_plus_half[4], mean_plus[4])
+    # push!(two_more, mean_minus[5], mean_minus_half[5], mean_normal[5], mean_plus_half[5], mean_plus[5])
+    # push!(three_more, mean_minus[6], mean_minus_half[6], mean_normal[6], mean_plus_half[6], mean_plus[6])
+    # push!(rr_par_30, mean_minus[7], mean_minus_half[7], mean_normal[7], mean_plus_half[7], mean_plus[7])
+    # push!(inc_fr, mean_minus[8], mean_minus_half[8], mean_normal[8], mean_plus_half[8], mean_plus[8])
+    # push!(inc_ac, mean_minus[9], mean_minus_half[9], mean_normal[9], mean_plus_half[9], mean_plus[9])
+    # push!(inc_sp, mean_minus[10], mean_minus_half[10], mean_normal[10], mean_plus_half[10], mean_plus[10])
+    # push!(h_array, mean_minus[11], mean_minus_half[11], mean_normal[11], mean_plus_half[11], mean_plus[11])
+    # push!(c_array, mean_minus[12], mean_minus_half[12], mean_normal[12], mean_plus_half[12], mean_plus[12])
+    # push!(e_array, mean_minus[13], mean_minus_half[13], mean_normal[13], mean_plus_half[13], mean_plus[13])
+    # push!(corr_array, mean_minus[14], mean_minus_half[14], mean_normal[14], mean_plus_half[14], mean_plus[14])
+
+    # p7 = Plots.plot([prev_year, lifetime, one_more, two_more, three_more], xticks = (1:5, label_ticks), label = ["prevalence" "lifetime prevalence" "more after one" "more after two" "more after three"], title ="rate friends healthy", legend = false)
+
+    # #h 
+    # prev_year = Float64[]
+    # lifetime = Float64[]
+    # life_1565 = Float64[]
+    # one_more = Float64[]
+    # two_more = Float64[]
+    # three_more = Float64[]
+    # rr_par_30 = Float64[]
+    # inc_fr = Float64[]
+    # inc_ac = Float64[]
+    # inc_sp = Float64[]
+    # h_array = Float64[]
+    # c_array = Float64[]
+    # e_array = Float64[]
+    # corr_array = Float64[]
+
+
+    # para = Parameters()
+    # para_plus_half = Parameters(h = para.h+ (0.5* para.h))
+    # para_minus_half = Parameters(h = para.h - (0.5* para.h))
+    # para_plus = Parameters(h = para.h + (para.h))
+    # para_minus = Parameters(h = para.h - (para.h))
+
+
+
+    # mean_normal, sd_normal = return_mean_100(para)
+    # mean_plus_half, sd_plus_half = return_mean_100(para_plus_half)
+    # mean_minus_half, sd_minus_half = return_mean_100(para_minus_half)
+    # mean_plus, sd_plus = return_mean_100(para_plus)
+    # mean_minus, sd_minus = return_mean_100(para_minus)
+   
+    # label_ticks = ["x0", "x0.5", "x1", "x1.5", "x2"]
+
+    # push!(prev_year, mean_minus[1], mean_minus_half[1], mean_normal[1], mean_plus_half[1], mean_plus[1])
+    # push!(lifetime, mean_minus[2], mean_minus_half[2], mean_normal[2], mean_plus_half[2], mean_plus[2])
+    # push!(life_1565, mean_minus[3], mean_minus_half[3], mean_normal[3], mean_plus_half[3], mean_plus[3])
+    # push!(one_more, mean_minus[4], mean_minus_half[4], mean_normal[4], mean_plus_half[4], mean_plus[4])
+    # push!(two_more, mean_minus[5], mean_minus_half[5], mean_normal[5], mean_plus_half[5], mean_plus[5])
+    # push!(three_more, mean_minus[6], mean_minus_half[6], mean_normal[6], mean_plus_half[6], mean_plus[6])
+    # push!(rr_par_30, mean_minus[7], mean_minus_half[7], mean_normal[7], mean_plus_half[7], mean_plus[7])
+    # push!(inc_fr, mean_minus[8], mean_minus_half[8], mean_normal[8], mean_plus_half[8], mean_plus[8])
+    # push!(inc_ac, mean_minus[9], mean_minus_half[9], mean_normal[9], mean_plus_half[9], mean_plus[9])
+    # push!(inc_sp, mean_minus[10], mean_minus_half[10], mean_normal[10], mean_plus_half[10], mean_plus[10])
+    # push!(h_array, mean_minus[11], mean_minus_half[11], mean_normal[11], mean_plus_half[11], mean_plus[11])
+    # push!(c_array, mean_minus[12], mean_minus_half[12], mean_normal[12], mean_plus_half[12], mean_plus[12])
+    # push!(e_array, mean_minus[13], mean_minus_half[13], mean_normal[13], mean_plus_half[13], mean_plus[13])
+    # push!(corr_array, mean_minus[14], mean_minus_half[14], mean_normal[14], mean_plus_half[14], mean_plus[14])
+
+    # p8 = Plots.plot([prev_year, lifetime, one_more, two_more, three_more], xticks = (1:5, label_ticks), label = ["prevalence" "lifetime prevalence" "more after one" "more after two" "more after three"], title ="heritability", legend = false)
+
+    # #h resilience
+    # prev_year = Float64[]
+    # lifetime = Float64[]
+    # life_1565 = Float64[]
+    # one_more = Float64[]
+    # two_more = Float64[]
+    # three_more = Float64[]
+    # rr_par_30 = Float64[]
+    # inc_fr = Float64[]
+    # inc_ac = Float64[]
+    # inc_sp = Float64[]
+    # h_array = Float64[]
+    # c_array = Float64[]
+    # e_array = Float64[]
+    # corr_array = Float64[]
+
+
+    # para = Parameters()
+    # para_plus_half = Parameters(h_resilience = para.h_resilience+ (0.5* para.h_resilience))
+    # para_minus_half = Parameters(h_resilience = para.h_resilience - (0.5* para.h_resilience))
+    # para_plus = Parameters(h_resilience = para.h_resilience + (para.h_resilience))
+    # para_minus = Parameters(h_resilience = para.h_resilience - (para.h_resilience))
+
+
+
+    # mean_normal, sd_normal = return_mean_100(para)
+    # mean_plus_half, sd_plus_half = return_mean_100(para_plus_half)
+    # mean_minus_half, sd_minus_half = return_mean_100(para_minus_half)
+    # mean_plus, sd_plus = return_mean_100(para_plus)
+    # mean_minus, sd_minus = return_mean_100(para_minus)
+   
+    # label_ticks = ["x0", "x0.5", "x1", "x1.5", "x2"]
+
+    # push!(prev_year, mean_minus[1], mean_minus_half[1], mean_normal[1], mean_plus_half[1], mean_plus[1])
+    # push!(lifetime, mean_minus[2], mean_minus_half[2], mean_normal[2], mean_plus_half[2], mean_plus[2])
+    # push!(life_1565, mean_minus[3], mean_minus_half[3], mean_normal[3], mean_plus_half[3], mean_plus[3])
+    # push!(one_more, mean_minus[4], mean_minus_half[4], mean_normal[4], mean_plus_half[4], mean_plus[4])
+    # push!(two_more, mean_minus[5], mean_minus_half[5], mean_normal[5], mean_plus_half[5], mean_plus[5])
+    # push!(three_more, mean_minus[6], mean_minus_half[6], mean_normal[6], mean_plus_half[6], mean_plus[6])
+    # push!(rr_par_30, mean_minus[7], mean_minus_half[7], mean_normal[7], mean_plus_half[7], mean_plus[7])
+    # push!(inc_fr, mean_minus[8], mean_minus_half[8], mean_normal[8], mean_plus_half[8], mean_plus[8])
+    # push!(inc_ac, mean_minus[9], mean_minus_half[9], mean_normal[9], mean_plus_half[9], mean_plus[9])
+    # push!(inc_sp, mean_minus[10], mean_minus_half[10], mean_normal[10], mean_plus_half[10], mean_plus[10])
+    # push!(h_array, mean_minus[11], mean_minus_half[11], mean_normal[11], mean_plus_half[11], mean_plus[11])
+    # push!(c_array, mean_minus[12], mean_minus_half[12], mean_normal[12], mean_plus_half[12], mean_plus[12])
+    # push!(e_array, mean_minus[13], mean_minus_half[13], mean_normal[13], mean_plus_half[13], mean_plus[13])
+    # push!(corr_array, mean_minus[14], mean_minus_half[14], mean_normal[14], mean_plus_half[14], mean_plus[14])
+
+    # p9 = Plots.plot([prev_year, lifetime, one_more, two_more, three_more], xticks = (1:5, label_ticks), label = ["prevalence" "lifetime prevalence" "more after one" "more after two" "more after three"], title ="h resilience", legend = false)
+
+    # Plots.plot(p1, p2, p3, p4, p5, p6, p7, p8, p9, layout = (@layout[a b; c d; e f; g h; i]))
+end
+
+function return_array_parts(array)
+    return array[1:3], array[4:6], array[7:10], array[11:14]
+end
+function return_mean_100(para)
+
+
+    prev_year = Float64[]
+    lifetime = Float64[]
+    life_1565 = Float64[]
+    one_more = Float64[]
+    two_more = Float64[]
+    three_more = Float64[]
+    rr_par_30 = Float64[]
+    inc_fr = Float64[]
+    inc_ac = Float64[]
+    inc_sp = Float64[]
+    h_array = Float64[]
+    c_array = Float64[]
+    e_array = Float64[]
+    corr_array = Float64[]
+
+
+
+    for i=1:100
+    
+        d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids = pre_setup()
+
+        sim = setup_sim(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids) 
+
+        results = run_sim(sim, para)
+
+        push!(prev_year, ratedep_12month(sim))
+        push!(lifetime, deprisk_life(sim))
+        push!(life_1565, deprisk_life_15to65(sim))
+        perc_one, perc_two, perc_three = depressive_episode_analytics(sim)
+        push!(one_more, perc_one)
+        push!(two_more, perc_two)
+        push!(three_more, perc_three)
+        push!(rr_par_30, results.rr_parents_30)
+        push!(inc_fr, results.incr4_fr)
+        push!(inc_ac, results.incr4_ac)
+        push!(inc_sp, results.incr4_sp)
+
+        h, c, e = heritability_calculations(sim)
+        push!(h_array, h)
+        push!(c_array, c)
+        push!(e_array, e)
+
+        corr = eigen_centrality(sim)
+        push!(corr_array, corr)
+
+    end
+
+    return [mean(prev_year), mean(lifetime), mean(life_1565), mean(one_more), mean(two_more), mean(three_more), mean(rr_par_30), mean(inc_fr)-1, mean(inc_ac)-1, mean(inc_sp)-1, mean(h_array), mean(c_array), mean(e_array), mean(corr_array)], [std(prev_year), std(lifetime), std(life_1565), std(one_more), std(two_more), std(three_more), std(rr_par_30), std(inc_fr), std(inc_ac), std(inc_sp), std(h_array), std(c_array), std(e_array), std(corr_array)]
+
+end
+
+
+function intervention_analytics!()
+
+    prev_year = Float64[]
+    lifetime = Float64[]
+    life_1565 = Float64[]
+    one_more = Float64[]
+    two_more = Float64[]
+    three_more = Float64[]
+    rr_par_30 = Float64[]
+    inc_fr = Float64[]
+    inc_ac = Float64[]
+    inc_sp = Float64[]
+    h_array = Float64[]
+    c_array = Float64[]
+    e_array = Float64[]
+    corr_array = Float64[]
+
+    para = Parameters()
+    mean_normal, sd_normal = return_mean_100(para)
+    mean_normal_1, mean_normal_2, mean_normal_3, mean_normal_4 = return_array_parts(mean_normal)
+
+    # #therapy for all 
+    para_therapy_all = Parameters(therapy_for_all = true)
+    mean_therapy_all, sd_therapy_all = return_mean_100(para_therapy_all)
+
+    # #therapy for lower ses 
+    para_therapy_lower_ses = Parameters(therapy_for_lower_ses = true)
+    mean_therapy_lower_ses, sd_therapy_lower_ses = return_mean_100(para_therapy_lower_ses)
+
+    #prevent depressive isolation
+    depr_isolation_03 = Parameters(prevent_depressive_isolation = 0.3)
+    depr_isolation_05 = Parameters(prevent_depressive_isolation = 0.5)
+    depr_isolation_07 = Parameters(prevent_depressive_isolation = 0.7)
+    depr_isolation_1 = Parameters(prevent_depressive_isolation = 1)
+    mean_isolation_03, sd_isolation_03 = return_mean_100(depr_isolation_03)
+    mean_isolation_05, sd_isolation_05 = return_mean_100(depr_isolation_05)
+    mean_isolation_07, sd_isolation_07 = return_mean_100(depr_isolation_07)
+    mean_isolation_1, sd_isolation_1 = return_mean_100(depr_isolation_1)
+
+    
+    # #educational_support_depressed_kids
+    ed_support_03 = Parameters(educational_support_depressed_kids = 0.3)
+    ed_support_05 = Parameters(educational_support_depressed_kids = 0.5)
+    ed_support_07 = Parameters(educational_support_depressed_kids = 0.7)
+    ed_support_1 = Parameters(educational_support_depressed_kids = 1)
+    mean_ed_support_03, sd_ed_support_03 = return_mean_100(ed_support_03)
+    mean_ed_support_05, sd_ed_support_05 = return_mean_100(ed_support_05)
+    mean_ed_support_07, sd_ed_support_07 = return_mean_100(ed_support_07)
+    mean_ed_support_1, sd_ed_support_1 = return_mean_100(ed_support_1)
+    
+    #job_support_depressed_pop
+    job_support_03 = Parameters(job_support_depressed_pop = 0.3)
+    job_support_05 = Parameters(job_support_depressed_pop = 0.5)
+    job_support_07 = Parameters(job_support_depressed_pop = 0.7)
+    job_support_1 = Parameters(job_support_depressed_pop = 0.9)
+    mean_job_support_03, sd_job_support_03 = return_mean_100(job_support_03)
+    mean_job_support_05, sd_job_support_05 = return_mean_100(job_support_05)
+    mean_job_support_07, sd_job_support_07 = return_mean_100(job_support_07)
+    mean_job_support_1, sd_job_support_1 = return_mean_100(job_support_1)
+
+
+    push!(prev_year, mean_normal[1], mean_therapy_all[1], mean_therapy_lower_ses[1], mean_isolation_1[1], mean_ed_support_1[1], mean_job_support_1[1])
+    push!(lifetime, mean_normal[2], mean_therapy_all[2], mean_therapy_lower_ses[2], mean_isolation_1[2], mean_ed_support_1[2], mean_job_support_1[2])
+    push!(life_1565, mean_normal[3], mean_therapy_all[3], mean_therapy_lower_ses[3], mean_isolation_1[3], mean_ed_support_1[3], mean_job_support_1[3])
+    push!(one_more, mean_normal[4], mean_therapy_all[4], mean_therapy_lower_ses[4], mean_isolation_1[4], mean_ed_support_1[4], mean_job_support_1[4])
+    push!(two_more, mean_normal[5], mean_therapy_all[5], mean_therapy_lower_ses[5], mean_isolation_1[5], mean_ed_support_1[5], mean_job_support_1[5])
+    push!(three_more, mean_normal[6], mean_therapy_all[6], mean_therapy_lower_ses[6], mean_isolation_1[6], mean_ed_support_1[6], mean_job_support_1[6])
+    push!(rr_par_30, mean_normal[7], mean_therapy_all[7], mean_therapy_lower_ses[7], mean_isolation_1[7], mean_ed_support_1[7], mean_job_support_1[7])
+    push!(inc_fr, mean_normal[8], mean_therapy_all[8], mean_therapy_lower_ses[8], mean_isolation_1[8], mean_ed_support_1[8], mean_job_support_1[8])
+    push!(inc_ac, mean_normal[9], mean_therapy_all[9], mean_therapy_lower_ses[9], mean_isolation_1[9], mean_ed_support_1[9], mean_job_support_1[9])
+    push!(inc_sp, mean_normal[10], mean_therapy_all[10], mean_therapy_lower_ses[10], mean_isolation_1[10], mean_ed_support_1[10], mean_job_support_1[10])
+    push!(h_array, mean_normal[11], mean_therapy_all[11], mean_therapy_lower_ses[11], mean_isolation_1[11], mean_ed_support_1[11], mean_job_support_1[11])
+    push!(c_array, mean_normal[12], mean_therapy_all[12], mean_therapy_lower_ses[12], mean_isolation_1[12], mean_ed_support_1[12], mean_job_support_1[12])
+    push!(e_array, mean_normal[13], mean_therapy_all[13], mean_therapy_lower_ses[13], mean_isolation_1[13], mean_ed_support_1[13], mean_job_support_1[13])
+    push!(corr_array, mean_normal[14], mean_therapy_all[14], mean_therapy_lower_ses[14], mean_isolation_1[14], mean_ed_support_1[14], mean_job_support_1[14])
+   
+    label_ticks = ["normal", "therapy all", "therapy ses", "isolation", "ed supp", "job supp"]
+  
+    StatsPlots.groupedbar([prev_year, lifetime, one_more, two_more, three_more], xticks = (1:6, label_ticks), bar_position=:dodge, label = ["prevalence" "lifetime prevalence" "more after one" "more after two" "more after three"], title="analysis of intervention effects", legend =:outertopright)
 end

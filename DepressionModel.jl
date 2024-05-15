@@ -18,6 +18,7 @@ using Karnak
 using ABCdeZ
 using Distances
 using StatsBase
+using StatsPlots
 
 include("parameters.jl") 
 
@@ -139,7 +140,7 @@ function update!(person, sim, para)
     rate -= limit(0, (para.rate_friends_healthy * n_healthy), rate)
 
 
-    final_risk = person.pheno_susceptibility_expo
+    final_risk = (person.pheno_susceptibility/person.pheno_resilience)
         
     if length(person.environmental_risk) > 0 
         rate_plus_experience = (para.w_mean * rate) + ((1-para.w_mean) * last(person.environmental_risk))
@@ -231,7 +232,7 @@ function population_update!(person, sim, para)
 
     if para.fdbck_education
         if person.age <= 18 && person.age <= 25 && person.state == depressed && person.education > 1
-            if rand() < para.depressiondropout
+            if rand() < para.depressiondropout - (para.educational_support_depressed_kids * para.depressiondropout)
                 person.education -= 1
             end
         end
@@ -251,7 +252,7 @@ function population_update!(person, sim, para)
     #Feedbackeffekt Einkommensverlust bei Depressionen lässt sich ausschalten
     if para.fdbck_income
         if person.age > 25 && person.state == depressed && person.income >= 10
-            if rand() < para.depression_jobloss
+            if rand() < para.depression_jobloss - (para.job_support_depressed_pop*para.depression_jobloss)
                 person.income -= 10
             end
         end
@@ -721,14 +722,14 @@ function social_dynamic!(person, para, sim)
         end
 
     #mit gewisser Wahrscheinlichkeit verlieren depressive Personen darüber hinaus auch Freunde und Bekannte nach gewisser Zeit; hier ab zweitem Jahr der Depression 
-
-    if length(person.friends) > 0 && person.state == depressed && rand() < para.friendloss && person.length_dep_episode > 1
+    
+    if length(person.friends) > 0 && person.state == depressed && rand() < (para.friendloss - (para.prevent_depressive_isolation*para.friendloss)) && person.length_dep_episode > 1
         fr = rand(person.friends)
 
         del_unsorted!(fr, person.friends)
         del_unsorted!(person, fr.friends)
 
-    elseif length(person.ac) > 0 && person.state == depressed && rand() < para.acloss && person.length_dep_episode > 1
+    elseif length(person.ac) > 0 && person.state == depressed && rand() < (para.acloss - (para.prevent_depressive_isolation*para.acloss)) && person.length_dep_episode > 1
         ac = rand(person.ac)
 
         del_unsorted!(person, ac.ac)
@@ -775,8 +776,17 @@ function setprobther!(person, para)
         else
             person.prob_ther = para.avail_low
         end
-    else
+    elseif para.therapy_for_all
         person.prob_ther = 1
+
+    elseif para.therapy_for_lower_ses
+        if person.education == 4
+            person.prob_ther = para.avail_high
+        else
+            person.prob_ther = para.avail_middle
+        end
+    else
+        person.prob_ther = (para.avail_high + para.avail_middle + para.avail_low)/3
     end
 
 end
