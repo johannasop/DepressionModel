@@ -140,7 +140,7 @@ function update!(person, sim, para)
     rate -= limit(0, (para.rate_friends_healthy * n_healthy), rate)
 
 
-    final_risk = (person.pheno_susceptibility/person.pheno_resilience)
+    final_risk = (person.pheno_susceptibility_expo)
         
     if length(person.environmental_risk) > 0 
         rate_plus_experience = (para.w_mean * rate) + ((1-para.w_mean) * last(person.environmental_risk))

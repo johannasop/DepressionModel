@@ -1529,7 +1529,6 @@ end
 
 function sensi_relevant_parameters!()
 
-    #homophily friends
     prev_year = Float64[]
     lifetime = Float64[]
     life_1565 = Float64[]
@@ -2116,7 +2115,9 @@ function intervention_analytics!()
     push!(e_array, mean_normal[13], mean_therapy_all[13], mean_therapy_lower_ses[13], mean_isolation_1[13], mean_ed_support_1[13], mean_job_support_1[13])
     push!(corr_array, mean_normal[14], mean_therapy_all[14], mean_therapy_lower_ses[14], mean_isolation_1[14], mean_ed_support_1[14], mean_job_support_1[14])
    
-    label_ticks = ["normal", "therapy all", "therapy ses", "isolation", "ed supp", "job supp"]
+    label_ticks = repeat(["normal", "therapy all", "therapy ses", "isolation", "ed supp", "job supp"], outer =5)
   
-    StatsPlots.groupedbar([prev_year, lifetime, one_more, two_more, three_more], xticks = (1:6, label_ticks), bar_position=:dodge, label = ["prevalence" "lifetime prevalence" "more after one" "more after two" "more after three"], title="analysis of intervention effects", legend =:outertopright)
+    results_array= [prev_year; lifetime; one_more; two_more; three_more]
+    grp = repeat(["prev year", "lifetime", "prob. more ep. after one", "prob. more ep. after two", "prob. more ep. after three"], inner= 6)
+    StatsPlots.groupedbar(grp, results_array, group = label_ticks, bar_position=:dodge, title="analysis of intervention effects", legend =:outertopright, size(1000, 900))
 end
