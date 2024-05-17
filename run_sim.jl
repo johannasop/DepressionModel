@@ -188,47 +188,8 @@ function standard!(ther_restriction, fdbck_education, fdbck_income, seed = 0)
 end
 
 function test!()
-    liste = []
-    for i = 1:10
-        push!(liste, SimplePerson())
-    end
-
-    liste[1].state = depressed
-    liste[1].n_dep_episode = 1
-    liste[5].state = depressed
-    liste[5].n_dep_episode = 1
-    liste[10].state = depressed
-    liste[10].n_dep_episode = 1
-
-
-
-    #1&3
-    #2&5
-    #7&9
-    #1&10
-
-    add_eachother!(liste[1], liste[1].friends, liste[3], liste[3].friends)
-    add_eachother!(liste[2], liste[2].friends, liste[5], liste[5].friends)
-    add_eachother!(liste[7], liste[7].friends, liste[9], liste[9].friends)
-    add_eachother!(liste[1], liste[1].friends, liste[10], liste[10].friends)
-
-    kopie = deepcopy(liste) 
-
-    liste[9].state = depressed
-    println(kopie[9].state)
-
-    del_unsorted!(liste[5], liste)
-    println(length(kopie))
-
-    add_eachother!(liste[4], liste[4].friends, liste[5], liste[5].friends)
-    println(length(kopie[4].friends))
-
-    print(everdepressed(liste[5]) == everdepressed(liste[1]))
-    print(everdepressed(liste[5]))
-
-    if any(p->everdepressed(p)== everdepressed(liste[5]), liste)
-        print("funktioniert")
-    end
+   
+    println(collect(15: 5: 80))
 end
 
 function distri!()
@@ -244,10 +205,10 @@ function distri!()
 
 end
 
-#mean_100!()
+mean_100!()
 #sensi_relevant_parameters!()
 #ages_prevalences!()
-intervention_analytics!()
+#intervention_analytics!()
 
 
 #qual = approximation_rr(50) 
@@ -265,7 +226,7 @@ intervention_analytics!()
 
 #test!()
 
-#standard!(true, false, false)
+#standard!(true, true, true)
 #distri!()
 
 

@@ -387,7 +387,7 @@ function calibration_abcde!()
 
     priors = Product([Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(0,1), Uniform(0,1), Uniform(0,1), Uniform(0,1), Uniform(0,10), Uniform(0,1), Uniform(0,1), Uniform(0,10), Uniform(0,1), Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(0,1)]) 
 
-    r1 = abcdesmc!(priors, dist!, ϵ , data, nparticles=130, nsims_max = 50, parallel = true)
+    r1 = abcdesmc!(priors, dist!, ϵ , data, nparticles=130, nsims_max = 500000, parallel = true)
 
     # posterior_prev = [t[1] for t in r1.P[r1.Wns .> 0.0]]
     # posterior_par = [t[2] for t in r1.P[r1.Wns .> 0.0]]
@@ -403,7 +403,12 @@ function calibration_abcde!()
     # posterior_lambda = [t[12] for t in r1.P[r1.Wns .> 0.0]]
     # posterior_scaling = [t[13] for t in r1.P[r1.Wns .> 0.0]]
     # posterior_mw = [t[14] for t in r1.P[r1.Wns .> 0.0]]
-
+    # posterior_mw = [t[15] for t in r1.P[r1.Wns .> 0.0]]
+    # posterior_mw = [t[16] for t in r1.P[r1.Wns .> 0.0]]
+    # posterior_mw = [t[17] for t in r1.P[r1.Wns .> 0.0]]
+    # posterior_mw = [t[18] for t in r1.P[r1.Wns .> 0.0]]
+    # posterior_mw = [t[19] for t in r1.P[r1.Wns .> 0.0]]
+    # posterior_mw = [t[20] for t in r1.P[r1.Wns .> 0.0]]
 
     evidence = exp(r1.logZ)
     blobs = r1.blobs[r1.Wns .> 0.0]
@@ -432,10 +437,10 @@ end
 
 function dist!(p, data) 
     results, h, c, e, life, prev, perc_one, perc_two, perc_three = model(p)
-    results_vector = [prev, life, results.rr_parents_30/10, log(results.incr4_fr), log(results.incr4_ac), log(results.incr4_sp), perc_one, perc_two, perc_three]
-    data_vector = [data.prev_12month, data.prev_15to65, data.increased_parents_30, log(data.increased_friends_4), log(data.increased_ac_4), log(data.increased_spouse_4), data.dep_episode_one_more, data.dep_episode_two_more, data.dep_episode_three_more]
+    results_vector = [prev, life, results.rr_parents_30/10, log(results.incr4_fr), log(results.incr4_ac), log(results.incr4_sp), perc_one, perc_two, perc_three, h, c, e]
+    data_vector = [data.prev_12month, data.prev_15to65, data.increased_parents_30, log(data.increased_friends_4), log(data.increased_ac_4), log(data.increased_spouse_4), data.dep_episode_one_more, data.dep_episode_two_more, data.dep_episode_three_more, data.h, data.c, data.e]
 
-    (abs(results_vector[1] - data_vector[1]) + abs(results_vector[2] - data_vector[2]) + abs(results_vector[3] - data_vector[3]) + abs(results_vector[4] - data_vector[4]) + abs(results_vector[5] - data_vector[5]) + abs(results_vector[6] - data_vector[6]) + abs(results_vector[7] - data_vector[7]) + abs(results_vector[8] - data_vector[8]) + abs(results_vector[9] - data_vector[9])), nothing
+    Distances.euclidean(results_vector, data_vector), nothing
  end
 
 function model(r)
@@ -495,7 +500,6 @@ function present_solution_abcde!(r)
         push!(dist, distance)
     end
 
-    filtered = [t for t in r.P[r.Wns .> 0.0]]
     println("Standardabweichungen der Parameter: ")
     println("prev: ", std([t[1] for t in r.P[r.Wns .> 0.0]]))
     println("rate parents: ", std([t[2] for t in r.P[r.Wns .> 0.0]]))

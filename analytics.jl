@@ -1482,7 +1482,8 @@ function mean_100!()
 
     #Alter und Prävalenz 
     ages_prev_mean = mean(ages_prev, dims= 1)
-    Plots.plot([ages_prev_mean], xlabel="age", ylabel="prevalence", legend = false)
+    xticks=collect(15:80)
+    Plots.plot([ages_prev_mean], xlabel="age", ylabel="prevalence", legend = false, xticks=(1:65, xticks))
 
 
 end
@@ -1495,7 +1496,7 @@ function ages_prevalences(sim)
 
     for i=15:80
         counter_people = count(p->p.age == i , sim.pop)
-        counter_depressed_people = count(p->p.age == i&& p.state == depressed, sim.pop)
+        counter_depressed_people = count(p->p.age == i && p.state == depressed, sim.pop)
         push!(ages_prev, counter_depressed_people/counter_people)
     end
 
@@ -2118,6 +2119,6 @@ function intervention_analytics!()
     label_ticks = repeat(["normal", "therapy all", "therapy ses", "isolation", "ed supp", "job supp"], outer =5)
   
     results_array= [prev_year; lifetime; one_more; two_more; three_more]
-    grp = repeat(["prev year", "lifetime", "prob. more ep. after one", "prob. more ep. after two", "prob. more ep. after three"], inner= 6)
-    StatsPlots.groupedbar(grp, results_array, group = label_ticks, bar_position=:dodge, title="analysis of intervention effects", legend =:outertopright, size(1000, 900))
+    grp = repeat(["prev year", "lifetime", "prob. more (1)", "prob. more (2)", "prob. more (3)"], inner= 6)
+    StatsPlots.groupedbar(grp, results_array, group = label_ticks, bar_position=:dodge, title="analysis of intervention effects", legend =:outertopright, size=(900, 700), xlabel="observed variable", ylabel="outcome")
 end
