@@ -385,9 +385,9 @@ function calibration_abcde!()
 
     ϵ = 0.1
 
-    priors = Product([Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(0,1), Uniform(0,1), Uniform(0,1), Uniform(0,1), Uniform(0,10), Uniform(0,1), Uniform(0,1), Uniform(0,10), Uniform(0,1), Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(0,1)]) 
+    priors = Product([Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(0,1), Uniform(0,1), Uniform(0,1), Uniform(0,1), Uniform(0,10), Uniform(0,1), Uniform(0,1)]) 
 
-    r1 = abcdesmc!(priors, dist!, ϵ , data, nparticles=130, nsims_max = 500000, parallel = true)
+    r1 = abcdesmc!(priors, dist!, ϵ , data, nparticles=130, nsims_max = 100000, parallel = true)
 
     # posterior_prev = [t[1] for t in r1.P[r1.Wns .> 0.0]]
     # posterior_par = [t[2] for t in r1.P[r1.Wns .> 0.0]]
@@ -446,7 +446,7 @@ function dist!(p, data)
 function model(r)
     d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids = pre_setup()
 
-    paras = Parameters(prev = r[1], rate_parents = r[2], rate_friends = r[3], rate_friends_healthy = r[4], rate_ac = r[5], rate_child = r[6], rate_spouse = r[7], rate_spouse_healthy = r[8], homophily_friends=r[9], homophily_spouse=r[10], homophily_ac=r[11],  lambda = r[12], scaling = r[13], w_mean = r[14], h= r[15],  b = r[16], h_resilience = r[17], b_resilience = r[18], mw_h = r[19], mw_h_resilience = r[20], h_expo=r[21])
+    paras = Parameters(prev = r[1], rate_parents = r[2], rate_friends = r[3], rate_friends_healthy = r[4], rate_ac = r[5], rate_child = r[6], rate_spouse = r[7], rate_spouse_healthy = r[8], homophily_friends=r[9], homophily_spouse=r[10], homophily_ac=r[11],  lambda = r[12], scaling = r[13], w_mean = r[14], h_expo=r[15])
     
     sim = setup_sim(paras, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
 
@@ -483,22 +483,53 @@ function present_solution_abcde!(r)
         push!(best, sample(r.P , Weights(r.Wns)))
     end
     for paras in best
-        results, h, c, e, life, prev, perc_one, perc_two, perc_three = model(paras)
-        distance, dista = dist!(paras, o)
-        push!(prev_12, prev)
-        push!(prev_1565, life)
-        push!(p_one, perc_one)
-        push!(p_two, perc_two)
-        push!(p_three, perc_three)
-        push!(incr_par, results.rr_parents_30/10)
-        push!(incr_fr, results.incr4_fr)
-        push!(incr_ac, results.incr4_ac)
-        push!(incr_spouse, results.incr4_sp)
-        push!(h_array, h)
-        push!(c_array, c)
-        push!(e_array, e)
-        push!(dist, distance)
+        prev_12_single = Float64[]
+        prev_1565_single = Float64[]
+        p_one_single = Float64[]
+        p_two_single = Float64[]
+        p_three_single = Float64[]
+        incr_par_single = Float64[]
+        incr_fr_single = Float64[]
+        incr_ac_single = Float64[]
+        incr_spouse_single = Float64[]
+        h_array_single = Float64[]
+        c_array_single = Float64[]
+        e_array_single = Float64[]
+        dist_single = Float64[]
+
+        for i=1:10
+            results, h, c, e, life, prev, perc_one, perc_two, perc_three = model(paras)
+            distance, nothing = dist!(paras, o)
+            push!(prev_12_single, prev)
+            push!(prev_1565_single, life)
+            push!(p_one_single, perc_one)
+            push!(p_two_single, perc_two)
+            push!(p_three_single, perc_three)
+            push!(incr_par_single, results.rr_parents_30/10)
+            push!(incr_fr_single, results.incr4_fr)
+            push!(incr_ac_single, results.incr4_ac)
+            push!(incr_spouse_single, results.incr4_sp)
+            push!(h_array_single, h)
+            push!(c_array_single, c)
+            push!(e_array_single, e)
+            push!(dist_single, distance)
+        end
+
+        push!(prev_12, mean(prev_12_single))
+        push!(prev_1565, mean(prev_1565_single))
+        push!(p_one, mean(p_one_single))
+        push!(p_two, mean(p_two_single))
+        push!(p_three, mean(p_three_single))
+        push!(incr_par, mean(incr_par_single))
+        push!(incr_fr, mean(incr_fr_single))
+        push!(incr_ac, mean(incr_ac_single))
+        push!(incr_spouse, mean(incr_spouse_single))
+        push!(h_array, mean(h_array_single))
+        push!(c_array, mean(c_array_single))
+        push!(e_array, mean(e_array_single))
+        push!(dist, mean(dist_single))
     end
+
 
     println("Standardabweichungen der Parameter: ")
     println("prev: ", std([t[1] for t in r.P[r.Wns .> 0.0]]))
@@ -515,13 +546,7 @@ function present_solution_abcde!(r)
     println("lambda: ", std([t[12] for t in r.P[r.Wns .> 0.0]]))
     println("scaling: ", std([t[13] for t in r.P[r.Wns .> 0.0]]))
     println("w_mean: ", std([t[14] for t in r.P[r.Wns .> 0.0]]))
-    println("h: ", std([t[15] for t in r.P[r.Wns .> 0.0]]))
-    println("b: ", std([t[16] for t in r.P[r.Wns .> 0.0]]))
-    println("h resilience: ", std([t[17] for t in r.P[r.Wns .> 0.0]]))
-    println("b resilience: ", std([t[18] for t in r.P[r.Wns .> 0.0]]))
-    println("mw h: ", std([t[19] for t in r.P[r.Wns .> 0.0]]))
-    println("mw h resilience: ", std([t[20] for t in r.P[r.Wns .> 0.0]]))
-    println("h expo: ", std([t[21] for t in r.P[r.Wns .> 0.0]]))
+    println("h expo: ", std([t[15] for t in r.P[r.Wns .> 0.0]]))
 
     
   

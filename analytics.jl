@@ -1373,6 +1373,9 @@ function mean_100!()
     fr_depressed = Float64[]
     fr_non_depressed = Float64[]
 
+    corr_income_episodes = Float64[]
+    corr_education_episodes = Float64[]
+
     m_e = 0
     m_r = 0
 
@@ -1417,9 +1420,11 @@ function mean_100!()
         push!(ages_prev, ages_prevalences(sim))
 
         push!(corr_age_nepisodes, corr_age_episodes(sim))
+
+        corr_income, corr_education = corr_ses_episodes(sim)
+        push!(corr_income_episodes, corr_income)
+        push!(corr_education_episodes, corr_education)
     
-
-
         for person in sim.pop_depressed
             friends_depressed += length(person.friends) 
         end
@@ -1455,6 +1460,8 @@ function mean_100!()
     println(" ")
     println("Korrelation der Eigenvektorzentralität mit der Anzahl depressiver Episoden: ", mean(corr_array), " sd: ", std(corr_array))
     println(" ")
+    println("Korrelation der depressiven Episoden mit Einkommen: ", )
+    println("Korrelation der depressiven Episoden mit Bildung: ", )
     println("average number of friends: depressed people: ", mean(fr_depressed), " sd: ", std(fr_depressed))
     println("average number of friends: nondepressed people: ", mean(fr_non_depressed), " sd: ", std(fr_non_depressed))
     println("_______________________________________________________________________________")
@@ -1488,6 +1495,22 @@ function mean_100!()
 
 end
 
+function corr_ses_episodes(sim)
+
+
+    income_array = Float64[]
+    education_array = Int64[]
+    n_episodes_array = Float64[]
+
+    for person in sim.pop
+        push!(income_array, person.income)
+        push!(education_array, person.education)
+        push!(n_episodes_array, person.n_dep_episode)
+    end
+
+    return cor(income_array, n_episodes_array), cor(education_array, n_episodes_array)
+
+end
 function ages_prevalences(sim)
 
     counter_people = 0
