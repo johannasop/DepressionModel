@@ -155,7 +155,7 @@ end
 function standard!(ther_restriction, fdbck_education, fdbck_income, seed = 0)
     d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids = pre_setup()
 
-    para = Parameters(ther_restriction = ther_restriction, fdbck_education = fdbck_education, fdbck_income = fdbck_income; seed)
+    para = Parameters(ther_restriction = ther_restriction, fdbck_education = fdbck_education, fdbck_income = fdbck_income, job_support_depressed_pop = true ; seed)
 
     sim = setup_sim(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids) 
 
@@ -167,8 +167,10 @@ function standard!(ther_restriction, fdbck_education, fdbck_income, seed = 0)
 
     #println("Qualität der aktuellen Lösung: ", qualcurrentsolution)
 
-    printgraph!(sim)
+    #printgraph!(sim)
+    #corr_income, corr_education = corr_ses_episodes(sim)
 
+    println(count(p->length(p.children) > 0, sim.pop_dead)/length(sim.pop_dead))  
     #episode_array, percentage_array = depressive_episodes(sim)
 
     #Plots.plot([results.n_depressed, results.n_healthy])
@@ -206,9 +208,10 @@ function distri!()
 end
 
 #mean_100!()
-#sensi_relevant_parameters!()
+sensi_relevant_parameters!()
 #ages_prevalences!()
-intervention_analytics!()
+#intervention_analytics!()
+#intervention_boxplots!()
 
 
 #qual = approximation_rr(50) 

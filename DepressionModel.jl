@@ -19,6 +19,7 @@ using ABCdeZ
 using Distances
 using StatsBase
 using StatsPlots
+using PlotlyJS
 
 include("parameters.jl") 
 
@@ -805,7 +806,7 @@ function therapy!(person, para, sim)
         if !(person in sim.pop_therapy_all)
             push!(sim.pop_therapy_all, person)
         end
-        
+
         if rand() < ratetoprob(para.rem_ther)
             person.state = healthy
             person.n_dep_episode += 1

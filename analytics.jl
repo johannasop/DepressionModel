@@ -1504,7 +1504,7 @@ function mean_100!()
     #Alter und Prävalenz 
     ages_prev_mean = mean(ages_prev, dims= 1)
     xticks=collect(15:80)
-    Plots.plot([ages_prev_mean], xlabel="age", ylabel="prevalence", legend = false, xticks=(1:65, xticks))
+    Plots.plot([ages_prev_mean], xlabel="age", ylabel="prevalence", legend = false)
 
 
 end
@@ -1531,7 +1531,7 @@ function ages_prevalences(sim)
     counter_depressed_people = 0
     ages_prev = Float64[]
 
-    for i=15:80
+    for i=0:80
         counter_people = count(p->p.age == i , sim.pop)
         counter_depressed_people = count(p->p.age == i && p.state == depressed, sim.pop)
         push!(ages_prev, counter_depressed_people/counter_people)
@@ -1584,10 +1584,10 @@ function sensi_relevant_parameters!()
 
 
     para = Parameters()
-    para_plus_half = Parameters(rate_friends_healthy = para.rate_friends_healthy+ (0.5* para.rate_friends_healthy))
-    para_minus_half = Parameters(rate_friends_healthy = para.rate_friends_healthy - (0.5* para.rate_friends_healthy))
-    para_plus = Parameters(rate_friends_healthy = para.rate_friends_healthy + (para.rate_friends_healthy))
-    para_minus = Parameters(rate_friends_healthy = para.rate_friends_healthy - (para.rate_friends_healthy))
+    para_plus_half = Parameters(homophily_friends = para.homophily_friends+ (0.5* para.homophily_friends))
+    para_minus_half = Parameters(homophily_friends = para.homophily_friends - (0.5* para.homophily_friends))
+    para_plus = Parameters(homophily_friends = para.homophily_friends + (para.homophily_friends))
+    para_minus = Parameters(homophily_friends = para.homophily_friends - (para.homophily_friends))
 
 
 
@@ -1614,7 +1614,7 @@ function sensi_relevant_parameters!()
     push!(e_array, mean_minus[13], mean_minus_half[13], mean_normal[13], mean_plus_half[13], mean_plus[13])
     push!(corr_array, mean_minus[14], mean_minus_half[14], mean_normal[14], mean_plus_half[14], mean_plus[14])
 
-    Plots.plot([prev_year, lifetime, one_more, two_more, three_more], xticks = (1:5, label_ticks), label = ["prevalence" "lifetime prevalence" "prob. more ep. after one" "prob. more ep. after two" "prob. more ep. after three"], lw=2, size=(400,300), legend =false, xlabel = "parameter change", ylabel="outcome")
+    Plots.plot([prev_year, lifetime, one_more, two_more, three_more], xticks = (1:5, label_ticks), label = ["prevalence" "lifetime prevalence" "prob. more ep. after one" "prob. more ep. after two" "prob. more ep. after three"], lw=2, size=(400,300), legend =:inside, xlabel = "parameter change", ylabel="outcome")
 
     #rate parents
     # prev_year = Float64[]
@@ -2158,4 +2158,112 @@ function intervention_analytics!()
     results_array= [prev_year; lifetime; one_more; two_more; three_more]
     grp = repeat(["prev year", "lifetime", "prob. more (1)", "prob. more (2)", "prob. more (3)"], inner= 6)
     StatsPlots.groupedbar(grp, results_array, group = label_ticks, bar_position=:dodge, title="analysis of intervention effects", legend =:outertopright, size=(900, 700), xlabel="observed variable", ylabel="outcome")
+
+end
+
+
+function intervention_boxplots!()
+
+    x = []
+    para = Parameters()
+    para_therapy_all = Parameters(therapy_for_all = true)
+    para_therapy_ses = Parameters(therapy_for_lower_ses = true)
+    para_prevent_isolation = Parameters(prevent_depressive_isolation = true)
+    para_job_support = Parameters(job_support_depressed_pop = true)
+    para_ed_support = Parameters(educational_support_depressed_kids = true)
+
+
+    for i = 1:10
+        push!(x, "prev year")
+    end
+    for i = 1:10
+        push!(x, "lifetime")
+    end
+    for i = 1:10
+        push!(x, "recurrence 1")
+    end
+    for i = 1:10
+        push!(x, "recurrence 2")
+    end
+    for i = 1:10
+        push!(x, "recurrence 3")
+    end
+
+    
+
+    trace1 = PlotlyJS.box(
+    y=return_boxplots_10_rep(para),
+    x=x,
+    name="no intervention",
+    marker_color="green"
+    )
+    trace2 = PlotlyJS.box(
+    y=return_boxplots_10_rep(para_therapy_all),
+    x=x,
+    name="therapy all",
+    marker_color="red"
+    )
+    trace3 = PlotlyJS.box(
+    y=return_boxplots_10_rep(para_therapy_ses),
+    x=x,
+    name="therapy lower ses",
+    marker_color="orange"
+    )
+    trace4 = PlotlyJS.box(
+    y=return_boxplots_10_rep(para_prevent_isolation),
+    x=x,
+    name="prevent isolation",
+    marker_color="black"
+    )
+    trace5 = PlotlyJS.box(
+    y=return_boxplots_10_rep(para_ed_support),
+    x=x,
+    name="ed support",
+    marker_color="blue"
+    )
+    trace6 = PlotlyJS.box(
+    y=return_boxplots_10_rep(para_job_support),
+    x=x,
+    name="job support",
+    marker_color="violet"
+    )
+
+    PlotlyJS.plot([trace1, trace2, trace3, trace4, trace5, trace6], Layout(yaxis_title="outcome measure", boxmode="group"))
+
+end
+
+function return_boxplots_10_rep(para)
+
+    prev_year = Float64[]
+    lifetime = Float64[]
+    life_1565 = Float64[]
+    one_more = Float64[]
+    two_more = Float64[]
+    three_more = Float64[]
+    rr_par_30 = Float64[]
+    inc_fr = Float64[]
+    inc_ac = Float64[]
+    inc_sp = Float64[]
+    h_array = Float64[]
+    c_array = Float64[]
+    e_array = Float64[]
+    corr_array = Float64[]
+
+    for i = 1:10
+        d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids = pre_setup()
+
+        sim = setup_sim(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids) 
+        results = run_sim(sim, para)
+
+        push!(prev_year, ratedep_12month(sim))
+        push!(lifetime, deprisk_life(sim))
+        perc_one, perc_two, perc_three = depressive_episode_analytics(sim)
+        push!(one_more, perc_one)
+        push!(two_more, perc_two)
+        push!(three_more, perc_three)
+    end
+
+    
+    return append!(prev_year, lifetime, one_more, two_more, three_more)
+    
 end
