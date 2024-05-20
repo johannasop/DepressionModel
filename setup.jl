@@ -201,8 +201,10 @@ function  setup_sim(para, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids
     pop_non_depressed = SimplePerson[]
     pop_currently_depressed = SimplePerson[]
     pop_dead = SimplePerson[]
+    pop_therapy_all = SimplePerson[]
+    pop_therapy_recurrent = SimplePerson[]
 
     # create a simulation object with parameter values
-    sim = Simulation(pop, pop_singles, pop_potentialparents, pop_identical_twins, pop_fraternal_twins, pop_depressed, pop_non_depressed, pop_currently_depressed, pop_dead, 0)
+    sim = Simulation(pop, pop_singles, pop_potentialparents, pop_identical_twins, pop_fraternal_twins, pop_depressed, pop_non_depressed, pop_currently_depressed, pop_dead,pop_therapy_all, pop_therapy_recurrent, 0)
     sim
 end

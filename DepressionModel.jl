@@ -102,6 +102,9 @@ mutable struct Simulation{AGENT}
 
     pop_dead :: Vector{AGENT}
 
+    pop_therapy_all :: Vector{AGENT}
+    pop_therapy_recurrent :: Vector{AGENT}
+
     time::Int64
 end
 
@@ -159,11 +162,14 @@ function update!(person, sim, para)
     if person.age >= 15 && rand() < person.risk
         person.state = depressed
         push!(sim.pop_currently_depressed, person)
+        if person in sim.pop_therapy_all && !(person in sim.pop_therapy_recurrent)
+            push!(sim.pop_therapy_recurrent, person)
+        end
     end
 
   
     #Spontanremmisionen 
-    if person.state == depressed && rand() < ratetoprob(para.rem)
+    if person.state == depressed && rand() < para.rem
         person.state = healthy
         person.n_dep_episode += 1
         person.length_dep_episode = 0
@@ -174,7 +180,7 @@ function update!(person, sim, para)
     end
 
     if person.state == depressed
-        therapy!(person, para)
+        therapy!(person, para, sim)
     end
 
     return rate
@@ -224,14 +230,14 @@ function population_update!(person, sim, para)
     #hier wird quasi erwarteter Bildungsstand berechnet
 
     #es wird vom Einkommen der wohlverdienenderen Person ausgegangen
-    if person.age == 18
+    if person.age == 15
         set_ses!(person,para)
     end
 
     #Wenn Personen in diesen Altersklassen Depressionen entwickeln, kann es sein, dass sie den "erwarteten" Bildungsstand nicht erreichen; dieser Feedbackeffekt lässt sich ausschalten
 
     if para.fdbck_education
-        if person.age <= 18 && person.age <= 25 && person.state == depressed && person.education > 1
+        if person.age >= 15 && person.age <= 25 && person.state == depressed && person.education > 1
             if rand() < para.depressiondropout - (para.educational_support_depressed_kids * para.depressiondropout)
                 person.education -= 1
             end
@@ -239,7 +245,7 @@ function population_update!(person, sim, para)
     end
 
     #Wahrscheinlichkeit sich in Therapie zu begeben in Abhängigkeit des SÖS
-    if person.age == 18
+    if person.age == 15
         setprobther!(person, para) 
     end
 
@@ -792,10 +798,14 @@ function setprobther!(person, para)
 end
 
 
-function therapy!(person, para)
+function therapy!(person, para, sim)
 
     #Annahme, dass Therapiemotivation mit weniger Erfolg sinkt
     if rand() < person.prob_ther 
+        if !(person in sim.pop_therapy_all)
+            push!(sim.pop_therapy_all, person)
+        end
+        
         if rand() < ratetoprob(para.rem_ther)
             person.state = healthy
             person.n_dep_episode += 1

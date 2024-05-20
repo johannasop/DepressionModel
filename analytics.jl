@@ -1345,7 +1345,17 @@ end
 
 
 #Ergebnisfunktionen Paper
+function therapy_recurrence(sim)
 
+    rem = 0
+
+    if length(sim.pop_therapy_all) > 0
+        rem =  1-(length(sim.pop_therapy_recurrent)/length(sim.pop_therapy_all))
+    end
+
+    return rem 
+
+end
 
 
 function mean_100!()
@@ -1375,6 +1385,8 @@ function mean_100!()
 
     corr_income_episodes = Float64[]
     corr_education_episodes = Float64[]
+
+    therapy_remission_prob = Float64[]
 
     m_e = 0
     m_r = 0
@@ -1434,6 +1446,7 @@ function mean_100!()
         push!(fr_depressed, friends_depressed/length(sim.pop_depressed))
         push!(fr_non_depressed, friends_non_depressed/length(sim.pop_non_depressed))
 
+        push!(therapy_remission_prob, 1-length(sim.pop_therapy_recurrent)/length(sim.pop_therapy_all))
     end
 
 
@@ -1464,6 +1477,7 @@ function mean_100!()
     println("Korrelation der depressiven Episoden mit Bildung: ", )
     println("average number of friends: depressed people: ", mean(fr_depressed), " sd: ", std(fr_depressed))
     println("average number of friends: nondepressed people: ", mean(fr_non_depressed), " sd: ", std(fr_non_depressed))
+    println("average remission prob after therapy: ", mean(therapy_remission_prob))
     println("_______________________________________________________________________________")
 
 

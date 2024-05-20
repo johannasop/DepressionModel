@@ -14,6 +14,8 @@ Base.@kwdef struct Optimalparams
     dep_episode_one_more::Float64 = 0.50
     dep_episode_two_more::Float64 = 0.75
     dep_episode_three_more::Float64 = 0.90
+
+    rem_therapy::Float64=0.45
 end
 
 Base.@kwdef struct Optimalrates
@@ -385,9 +387,9 @@ function calibration_abcde!()
 
     ϵ = 0.1
 
-    priors = Product([Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(0,1), Uniform(0,1), Uniform(0,1), Uniform(0,1), Uniform(0,10), Uniform(0,1), Uniform(0,1)]) 
+    priors = Product([Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(0,10), Uniform(0,1), Uniform(0,1), Uniform(0,1), Uniform(0,1), Uniform(0,10), Uniform(0,1), Uniform(0,1), Uniform(0,10)]) 
 
-    r1 = abcdesmc!(priors, dist!, ϵ , data, nparticles=130, nsims_max = 100000, parallel = true)
+    r1 = abcdesmc!(priors, dist!, ϵ , data, nparticles=130, nsims_max = 500000, parallel = true)
 
     # posterior_prev = [t[1] for t in r1.P[r1.Wns .> 0.0]]
     # posterior_par = [t[2] for t in r1.P[r1.Wns .> 0.0]]
@@ -436,9 +438,9 @@ function calibration_abcde!()
 end
 
 function dist!(p, data) 
-    results, h, c, e, life, prev, perc_one, perc_two, perc_three = model(p)
-    results_vector = [prev, life, results.rr_parents_30/10, log(results.incr4_fr), log(results.incr4_ac), log(results.incr4_sp), perc_one, perc_two, perc_three, h, c, e]
-    data_vector = [data.prev_12month, data.prev_15to65, data.increased_parents_30, log(data.increased_friends_4), log(data.increased_ac_4), log(data.increased_spouse_4), data.dep_episode_one_more, data.dep_episode_two_more, data.dep_episode_three_more, data.h, data.c, data.e]
+    results, h, c, e, life, prev, perc_one, perc_two, perc_three, rem_ther = model(p)
+    results_vector = [prev, life, results.rr_parents_30/10, log(results.incr4_fr), log(results.incr4_ac), log(results.incr4_sp), perc_one, perc_two, perc_three, h, c, e, rem_ther]
+    data_vector = [data.prev_12month, data.prev_15to65, data.increased_parents_30, log(data.increased_friends_4), log(data.increased_ac_4), log(data.increased_spouse_4), data.dep_episode_one_more, data.dep_episode_two_more, data.dep_episode_three_more, data.h, data.c, data.e, data.rem_therapy]
 
     Distances.euclidean(results_vector, data_vector), nothing
  end
@@ -446,7 +448,7 @@ function dist!(p, data)
 function model(r)
     d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids = pre_setup()
 
-    paras = Parameters(prev = r[1], rate_parents = r[2], rate_friends = r[3], rate_friends_healthy = r[4], rate_ac = r[5], rate_child = r[6], rate_spouse = r[7], rate_spouse_healthy = r[8], homophily_friends=r[9], homophily_spouse=r[10], homophily_ac=r[11],  lambda = r[12], scaling = r[13], w_mean = r[14], h_expo=r[15])
+    paras = Parameters(prev = r[1], rate_parents = r[2], rate_friends = r[3], rate_friends_healthy = r[4], rate_ac = r[5], rate_child = r[6], rate_spouse = r[7], rate_spouse_healthy = r[8], homophily_friends=r[9], homophily_spouse=r[10], homophily_ac=r[11],  lambda = r[12], scaling = r[13], w_mean = r[14], h_expo=r[15], rem_ther=r[16])
     
     sim = setup_sim(paras, d_sum_m, d_sum_f, d_sum_kids, data_grownups, data_kids)
 
@@ -454,9 +456,10 @@ function model(r)
     h, c, e = heritability_calculations(sim)
     life = deprisk_life_15to65(sim)
     prev = ratedep_12month(sim)
+    rem_ther = therapy_recurrence(sim)
 
     perc_one, perc_two, perc_three = depressive_episode_analytics(sim)
-    return results, h, c, e, life, prev, perc_one, perc_two, perc_three
+    return results, h, c, e, life, prev, perc_one, perc_two, perc_three, rem_ther
 end
 
 function present_solution_abcde!(r)
@@ -475,6 +478,7 @@ function present_solution_abcde!(r)
     h_array = Float64[]
     c_array = Float64[]
     e_array = Float64[]
+    ther_rec_array = Float64[]
     dist = Float64[]
 
     o = Optimalparams()
@@ -496,9 +500,10 @@ function present_solution_abcde!(r)
         c_array_single = Float64[]
         e_array_single = Float64[]
         dist_single = Float64[]
+        ther_rec_single = Float64[]
 
         for i=1:10
-            results, h, c, e, life, prev, perc_one, perc_two, perc_three = model(paras)
+            results, h, c, e, life, prev, perc_one, perc_two, perc_three, ther_rec = model(paras)
             distance, nothing = dist!(paras, o)
             push!(prev_12_single, prev)
             push!(prev_1565_single, life)
@@ -513,6 +518,7 @@ function present_solution_abcde!(r)
             push!(c_array_single, c)
             push!(e_array_single, e)
             push!(dist_single, distance)
+            push!(ther_rec_single, ther_rec)
         end
 
         push!(prev_12, mean(prev_12_single))
@@ -528,6 +534,7 @@ function present_solution_abcde!(r)
         push!(c_array, mean(c_array_single))
         push!(e_array, mean(e_array_single))
         push!(dist, mean(dist_single))
+        push!(ther_rec_array, mean(ther_rec_single))
     end
 
 
@@ -547,6 +554,8 @@ function present_solution_abcde!(r)
     println("scaling: ", std([t[13] for t in r.P[r.Wns .> 0.0]]))
     println("w_mean: ", std([t[14] for t in r.P[r.Wns .> 0.0]]))
     println("h expo: ", std([t[15] for t in r.P[r.Wns .> 0.0]]))
+    println("ther remission: ", std([t[16] for t in r.P[r.Wns .> 0.0]]))
+
 
     
   
@@ -568,6 +577,7 @@ function present_solution_abcde!(r)
     println("h: ", mean(h_array), " Standardabweichung: ", std(h_array))
     println("c: ", mean(c_array), " Standardabweichung: ", std(c_array))
     println("e: ", mean(e_array), " Standardabweichung: ", std(e_array))
+    println("therapy remission: ", mean(ther_rec_array))
     println(" ")
     #println("Korrelation der Eigenvektorzentralität mit der Anzahl depressiver Episoden: ", eigen_centrality(sim))
     

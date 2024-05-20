@@ -205,10 +205,10 @@ function distri!()
 
 end
 
-mean_100!()
+#mean_100!()
 #sensi_relevant_parameters!()
 #ages_prevalences!()
-#intervention_analytics!()
+intervention_analytics!()
 
 
 #qual = approximation_rr(50) 
