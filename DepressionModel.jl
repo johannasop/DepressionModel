@@ -807,7 +807,7 @@ function therapy!(person, para, sim)
             push!(sim.pop_therapy_all, person)
         end
 
-        if rand() < ratetoprob(para.rem_ther)
+        if rand() < para.rem_ther
             person.state = healthy
             person.n_dep_episode += 1
             person.length_dep_episode = 0
