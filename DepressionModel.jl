@@ -1,25 +1,5 @@
 using Random
-using Plots
-using DifferentialEquations
 using Distributions
-using CSV
-using DataFrames
-using MiniObserve
-using Statistics
-using AlgebraOfGraphics
-using CairoMakie
-using LIBSVM
-using Makie
-using Graphs
-using GraphPlot
-using NetworkLayout
-using Colors
-using Karnak
-using ABCdeZ
-using Distances
-using StatsBase
-using StatsPlots
-using PlotlyJS
 
 include("parameters.jl") 
 
