@@ -436,7 +436,7 @@ function calibration_abcde!()
 end
 
 function dist!(p, data) 
-    results, h, c, e, life, prev, perc_one, perc_two, perc_three, rem_ther = model(p)
+    results, h, c, e, life, prev, perc_one, perc_two, perc_three = model(p)
     results_vector = [prev, life, results.rr_parents_30/10, log(results.incr4_fr), log(results.incr4_ac), log(results.incr4_sp), perc_one, perc_two, perc_three, h, c, e]
     data_vector = [data.prev_12month, data.prev_15to65, data.increased_parents_30, log(data.increased_friends_4), log(data.increased_ac_4), log(data.increased_spouse_4), data.dep_episode_one_more, data.dep_episode_two_more, data.dep_episode_three_more, data.h, data.c, data.e]
 

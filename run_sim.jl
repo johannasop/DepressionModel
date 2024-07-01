@@ -208,7 +208,7 @@ function distri!()
 end
 
 #mean_100!()
-sensi_relevant_parameters!()
+#sensi_relevant_parameters!()
 #ages_prevalences!()
 #intervention_analytics!()
 #intervention_boxplots!()
