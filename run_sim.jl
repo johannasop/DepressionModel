@@ -1,3 +1,6 @@
+push!(LOAD_PATH, ".")
+
+
 include("DepressionModel.jl")
 include("setup.jl")
 
